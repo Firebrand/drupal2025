@@ -1,0 +1,74 @@
+services:
+  single_content_sync.exporter:
+    class: Drupal\single_content_sync\ContentExporter
+    arguments:
+      - '@entity_type.manager'
+      - '@module_handler'
+      - '@messenger'
+      - '@language_manager'
+      - '@single_content_sync.helper'
+      - '@entity.repository'
+      - '@plugin.manager.single_content_sync_field_processor'
+      - '@plugin.manager.single_content_sync_base_fields_processor'
+      - '@event_dispatcher'
+
+  single_content_sync.importer:
+    class: Drupal\single_content_sync\ContentImporter
+    arguments:
+      - '@entity_type.manager'
+      - '@entity.repository'
+      - '@module_handler'
+      - '@file_system'
+      - '@single_content_sync.helper'
+      - '@datetime.time'
+      - '@plugin.manager.single_content_sync_field_processor'
+      - '@plugin.manager.single_content_sync_base_fields_processor'
+      - '@event_dispatcher'
+      - '@stream_wrapper_manager'
+
+  single_content_sync.file_generator:
+    class: Drupal\single_content_sync\ContentFileGenerator
+    arguments:
+      - '@file_system'
+      - '@single_content_sync.helper'
+      - '@single_content_sync.exporter'
+      - '@single_content_sync.store'
+
+  single_content_sync.helper:
+    class: Drupal\single_content_sync\ContentSyncHelper
+    arguments:
+      - '@uuid'
+      - '@file_system'
+      - '@file.repository'
+      - '@plugin.manager.archiver'
+      - '@entity_type.manager'
+      - '@config.factory'
+      - '@entity.repository'
+      - '@entity_type.bundle.info'
+
+  single_content_sync.store:
+    class: \Drupal\Core\TempStore\PrivateTempStore
+    factory: ['@tempstore.private', 'get']
+    arguments: [single_content_sync]
+
+  plugin.manager.single_content_sync_field_processor:
+    class: Drupal\single_content_sync\SingleContentSyncFieldProcessorPluginManager
+    parent: default_plugin_manager
+    arguments:
+      - '@entity_field.manager'
+
+  plugin.manager.single_content_sync_base_fields_processor:
+    class: Drupal\single_content_sync\SingleContentSyncBaseFieldsProcessorPluginManager
+    parent: default_plugin_manager
+    arguments:
+      - '@entity_type.manager'
+  single_content_sync.command_helper:
+    class: Drupal\single_content_sync\Utility\CommandHelper
+    arguments:
+      - '@single_content_sync.importer'
+      - '@config.factory'
+      - '@entity_type.manager'
+      - '@single_content_sync.helper'
+      - '@file_system'
+      - '@entity.repository'
+      - '%app.root%'

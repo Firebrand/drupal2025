@@ -1,0 +1,31 @@
+action.configuration.content_bulk_export:
+  type: mapping
+  label: 'Export content'
+  mapping:
+    assets:
+      type: boolean
+      label: 'Include all assets'
+    translation:
+      type: boolean
+      label: 'Include all translations'
+
+single_content_sync.settings:
+  type: config_object
+  label: 'Single Content Sync settings'
+  mapping:
+    allowed_entity_types:
+      type: sequence
+      label: 'Allowed entity types to export'
+      sequence:
+        type: sequence
+        sequence:
+          type: string
+    site_uuid_check:
+      type: boolean
+      label: 'Site UUID check'
+    import_directory_schema:
+      type: string
+      label: 'Import directory file schema'
+    export_directory_schema:
+      type: string
+      label: 'Export directory file schema'
