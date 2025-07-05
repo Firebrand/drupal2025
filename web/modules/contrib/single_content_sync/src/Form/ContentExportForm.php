@@ -91,41 +91,12 @@ class ContentExportForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $extract_translations = $form_state->getValue('translation', FALSE);
     $parameters = $this->getRouteMatch()->getParameters();
     $entity = $this->contentSyncHelper->getDefaultLanguageEntity($parameters);
 
-    $export_in_yaml = $this->contentExporter->doExportToYml($entity, $extract_translations);
-
-    $form['output'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Exported content'),
-      '#attributes' => [
-        'data-yaml-editor' => 'true',
-      ],
-      '#wrapper_attributes' => [
-        'id' => 'exported-content',
-      ],
-      '#value' => $export_in_yaml,
-      '#attached' => [
-        'library' => [
-          'single_content_sync/yaml_editor',
-        ],
-      ],
-    ];
-
-    $form['translation'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Include all translations?'),
-      '#description' => $this->t('The exported content will be refreshed to preview it with translations.'),
-      '#ajax' => [
-        'callback' => '::refreshContent',
-        'wrapper' => 'exported-content',
-        'effect' => 'fade',
-        'progress' => [
-          'type' => 'fullscreen',
-        ],
-      ],
+    $form['deploy_message'] = [
+      '#type' => 'markup',
+      '#markup' => $this->t('By using the generated file you can import content on deploy'),
     ];
 
     $form['actions'] = [
@@ -139,82 +110,37 @@ class ContentExportForm extends FormBase {
       '#value' => $this->t('Download as a zip with all assets'),
     ];
 
-    $form['actions']['download_file'] = [
-      '#type' => 'submit',
-      '#name' => 'download_file',
-      '#value' => $this->t('Download as a file'),
-    ];
-
     return $form;
   }
 
-  /**
-   * Ajax callback to refresh output field.
-   *
-   * @param array $form
-   *   The form array.
-   * @param \Drupal\Core\Form\FormStateInterface $form_state
-   *   The form state.
-   *
-   * @return array
-   *   The refreshed form element.
-   */
-  public function refreshContent(array &$form, FormStateInterface $form_state): array {
-    // Clean up warning messages when refreshing field.
-    $this->messenger()->deleteByType('warning');
 
-    return $form['output'];
-  }
 
   /**
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $button = $form_state->getTriggeringElement();
-    $extract_translations = $form_state->getValue('translation', FALSE);
     $parameters = $this->getRouteMatch()->getParameters();
     $entity = $this->contentSyncHelper->getDefaultLanguageEntity($parameters);
     $file_name = $this->contentSyncHelper->generateContentFileName($entity);
-    $exported_entity = $this->contentExporter->doExportToYml($entity, $extract_translations);
-
-    // Stream a YML without assets.
-    if ($button['#name'] === 'download_file') {
-      $response = new StreamedResponse(static function() use ($exported_entity) {
-        echo $exported_entity;
-      }, 200, [
-        'Content-disposition' => 'attachment; filename="' . $file_name . '.yml"',
-        'Content-Type' => 'application/yaml',
-      ]);
-      $form_state->setResponse($response);
-      return;
-    }
 
     // Stream a zip with assets.
-    if ($button['#name'] === 'download_zip') {
-      $response = new StreamedResponse(function() use ($entity, $extract_translations) {
-        $file = $this->fileGenerator->generateZipFile($entity, $extract_translations);
-        $fp = fopen($file->getFileUri(), 'rb');
+    $response = new StreamedResponse(function() use ($entity) {
+      $file = $this->fileGenerator->generateZipFile($entity, FALSE);
+      $fp = fopen($file->getFileUri(), 'rb');
 
-        while (!feof($fp)) {
-          // Read a chunk of the file and send it to the client.
-          echo fread($fp, 8192);
+      while (!feof($fp)) {
+        // Read a chunk of the file and send it to the client.
+        echo fread($fp, 8192);
+      }
 
-          // Flush the buffer to ensure the data is sent to the client.
-          flush();
-        }
-
-        // Close the file once done.
-        fclose($fp);
-
-        // Delete temp zip file permanently.
-        $file->delete();
-      }, 200, [
-        'Content-disposition' => 'attachment; filename="' . $file_name . '.zip"',
-        'Content-Type' => 'application/zip',
-      ]);
-
-      $form_state->setResponse($response);
-    }
+      fclose($fp);
+      // Delete the temporary file.
+      $file->delete();
+    }, 200, [
+      'Content-disposition' => 'attachment; filename="' . $file_name . '.zip"',
+      'Content-Type' => 'application/zip',
+    ]);
+    $form_state->setResponse($response);
   }
 
   /**

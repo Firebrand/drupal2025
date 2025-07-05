@@ -11,46 +11,7 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Template\Attribute;
 
-/**
- * Implements hook_help().
- */
-function single_content_sync_help($route_name, RouteMatchInterface $route_match) {
-  $output = '';
 
-  if ($route_name === 'help.page.single_content_sync') {
-    $output .= '<h3>' . t('About') . '</h3>';
-    $output .= '<p>' . t('The Single Content Sync module in Drupal provides you with an easy way to export any content with the possibility to further import them to another environment or website. For more information, see the <a href=":documentation">online documentation for the Single Content Sync module</a>.', [':documentation' => 'https://www.drupal.org/docs/contributed-modules/single-content-sync']) . '</p>';
-
-    return $output;
-  }
-
-  if ($route_name === 'single_content_sync.config_settings') {
-    $output .= '<p>' . t('Limit the export of certain Entity types by unselecting them below.') . '</p>';
-    $output .= '<p>' . t('For example: if <em>Users</em> should not be allowed to be exported, unselect the appropriate checkbox and press <b>Save configuration</b>') . '</p>';
-    $output .= '<p>' . t('Referenced entities of your exported content are not limited by this form.') . '</p>';
-
-    return $output;
-  }
-
-  if ($route_name === 'single_content_sync.import') {
-    $output .= '<p>' . t('Content is checked by uuid, so existing content is updated, and new content is created.') . '</p>';
-
-    return $output;
-  }
-
-  $entity_types = \Drupal::entityTypeManager()->getDefinitions();
-
-  foreach (array_keys($entity_types) as $entity_type_id) {
-    if ($route_name === "entity.{$entity_type_id}.single_content:export") {
-      $output .= '<p>' . t('Simply copy it and go to the import page on /admin/content/import of another environment to paste it, or use the action buttons below.') . '</p>';
-      $output .= '<br><p>' . t('You can download the results as a zip file with all file assets such as images, documents, videos and etc.') . '</p>';
-      $output .= '<p>' . t('You can also download the results as a single YAML file, in this case, files will be imported by the absolute URL (suitable if your files are hosted externally).') . '</p>';
-      $output .= '<br><p>' . t('By using the generated file you can import content on deploy. Refer to the README for information on how to do this.') . '</p>';
-
-      return $output;
-    }
-  }
-}
 
 /**
  * Implements hook_entity_type_build().
