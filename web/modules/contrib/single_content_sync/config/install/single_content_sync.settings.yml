@@ -1,9 +1,5 @@
 allowed_entity_types:
-  block_content: {  }
-  media: {  }
-  menu_link_content: {  }
-  node: {  }
-  taxonomy_term: {  }
+  paragraphs_library_item: {  }
 site_uuid_check: true
 import_directory_schema: 'temporary'
 export_directory_schema: 'temporary'
