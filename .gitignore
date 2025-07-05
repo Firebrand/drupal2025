@@ -1,19 +1,19 @@
 # Ignore configuration files that may contain sensitive information
-/sites/*/settings*.php
-/sites/*/services*.yml
+/web/sites/*/settings*.php
+/web/sites/*/services*.yml
 
 # Ignore paths that contain user-generated content
-/sites/*/files
-/sites/*/private
-/files/*
-/private/*
+/web/sites/*/files
+/web/sites/*/private
+/web/files/*
+/web/private/*
 
 # Ignore SimpleTest multi-site environment
-/sites/simpletest
+/web/sites/simpletest
 
 # Ignore core testing directories
-/core/modules/*/tests/
-/core/profiles/*/tests/
+/web/core/modules/*/tests/
+/web/core/profiles/*/tests/
 
 # Ignore build artifacts
 /build/
