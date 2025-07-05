@@ -1,0 +1,68 @@
+# Ignore configuration files that may contain sensitive information
+/sites/*/settings*.php
+/sites/*/services*.yml
+
+# Ignore paths that contain user-generated content
+/sites/*/files
+/sites/*/private
+/files/*
+/private/*
+
+# Ignore SimpleTest multi-site environment
+/sites/simpletest
+
+# Ignore core testing directories
+/core/modules/*/tests/
+/core/profiles/*/tests/
+
+# Ignore build artifacts
+/build/
+/bin/
+/tmp/
+/vendor/
+node_modules/
+
+# Ignore composer files
+composer.phar
+/composer.lock
+
+# Ignore local development files
+/.env
+/.editorconfig
+/.gitattributes
+.DS_Store
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Ignore log files and databases
+*.log
+*.sql
+*.sqlite
+*.mysql
+
+# Ignore generated files
+/sites/*/translations
+/sites/*/tmp
+/sites/*/cache
+/sites/*/files/css
+/sites/*/files/js
+/sites/*/files/php
+/sites/*/files/styles
+/sites/*/files/translations
+
+# Ignore Drupal's file directory
+/sites/default/files
+
+# Ignore backup files
+*~
+*.bak
+*.swp
+
+# Ignore compiled CSS and JS
+*.css.map
+*.js.map
+
+# Ignore configuration sync directory
+/config/sync/
