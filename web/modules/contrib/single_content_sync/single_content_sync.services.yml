@@ -62,12 +62,7 @@ services:
     parent: default_plugin_manager
     arguments:
       - '@entity_type.manager'
-  single_content_sync.command_helper:
-    class: Drupal\single_content_sync\Utility\CommandHelper
-    arguments:
-      - '@single_content_sync.importer'
-      - '@config.factory'
-      - '@entity_type.manager'
+
       - '@single_content_sync.helper'
       - '@file_system'
       - '@entity.repository'
