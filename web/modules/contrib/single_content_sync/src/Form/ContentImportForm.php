@@ -91,20 +91,7 @@ class ContentImportForm extends FormBase {
         ['@size' => $max_upload_size]
       ),
     ];
-    $form['content'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Paste the content from the clipboard'),
-      '#required' => FALSE,
-      '#prefix' => '<br><p>' . $this->t('OR') . '</p><br>',
-      '#attributes' => [
-        'data-yaml-editor' => 'true',
-      ],
-      '#attached' => [
-        'library' => [
-          'single_content_sync/yaml_editor',
-        ],
-      ],
-    ];
+
     $form['actions'] = ['#type' => 'actions'];
     $form['actions']['import'] = [
       '#type' => 'submit',
@@ -120,10 +107,9 @@ class ContentImportForm extends FormBase {
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
     $upload_file = $form_state->getValue('upload_fid');
-    $content = $form_state->getValue('content');
 
-    if (!$upload_file && !$content) {
-      $form_state->setErrorByName('upload_fid' & 'content', $this->t('Please fill in one of the fields to import your content.'));
+    if (!$upload_file) {
+      $form_state->setErrorByName('upload_fid', $this->t('Please upload a file to import your content.'));
     }
   }
 
@@ -131,38 +117,25 @@ class ContentImportForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    // Handle uploaded file first.
-    if ($upload_file = $form_state->getValue('upload_fid')) {
-      $fid = reset($upload_file);
-      $file_real_path = $this->contentSyncHelper->getFileRealPathById($fid);
-      $file_info = pathinfo($file_real_path);
-      $entity = NULL;
+    $fid = reset($form_state->getValue('upload_fid'));
+    $file_real_path = $this->contentSyncHelper->getFileRealPathById($fid);
+    $file_info = pathinfo($file_real_path);
+    $entity = NULL;
 
-      try {
-        if ($file_info['extension'] === 'zip') {
-          $this->contentImporter->importFromZip($file_real_path);
-        }
-        else {
-          $entity = $this->contentImporter->importFromFile($file_real_path);
-        }
+    try {
+      if ($file_info['extension'] === 'zip') {
+        $this->contentImporter->importFromZip($file_real_path);
       }
-      catch (\Exception $e) {
-        $this->messenger()->addError($e->getMessage());
-      }
-
-      // Clean up the temporary uploaded file.
-      ContentBatchImporter::cleanUploadedFile($fid);
-    }
-    else {
-      try {
-        $content_array = $this->contentSyncHelper->validateYamlFileContent($form_state->getValue('content'));
-        $entity = $this->contentImporter->doImport($content_array);
-      }
-      catch (\Exception $e) {
-        $this->messenger()->addError($e->getMessage());
-        return;
+      else {
+        $entity = $this->contentImporter->importFromFile($file_real_path);
       }
     }
+    catch (\Exception $e) {
+      $this->messenger()->addError($e->getMessage());
+    }
+
+    // Clean up the temporary uploaded file.
+    ContentBatchImporter::cleanUploadedFile($fid);
 
     if ($entity) {
       $this->messenger()->addStatus($this->t('The content has been synced @link', [
