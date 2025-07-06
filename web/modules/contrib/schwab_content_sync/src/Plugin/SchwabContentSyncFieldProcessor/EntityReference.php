@@ -76,7 +76,7 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
     ContentExporterInterface $exporter,
     ContentImporterInterface $importer,
     EntityRepositoryInterface $entity_repository,
-    EntityTypeManagerInterface $entity_type_manager
+    EntityTypeManagerInterface $entity_type_manager,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 

@@ -65,7 +65,7 @@ abstract class FieldProcessorTestBase extends KernelTestBase {
     array $fieldStorageDefinition,
     mixed $fieldValue,
     array $expectedExportOutput,
-    array $extraModules = []
+    array $extraModules = [],
   ): void {
     if ($extraModules) {
       $this->enableModules($extraModules);
@@ -114,7 +114,7 @@ abstract class FieldProcessorTestBase extends KernelTestBase {
     array $fieldStorageDefinition,
     mixed $dataToImport,
     mixed $expectedFieldValue = NULL,
-    array $extraModules = []
+    array $extraModules = [],
   ): void {
     if ($expectedFieldValue === NULL) {
       $expectedFieldValue = $dataToImport;

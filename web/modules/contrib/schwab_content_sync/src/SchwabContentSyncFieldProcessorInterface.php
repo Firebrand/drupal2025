@@ -42,7 +42,7 @@ interface SchwabContentSyncFieldProcessorInterface {
   public function importFieldValue(
     FieldableEntityInterface $entity,
     string $fieldName,
-    array $value
+    array $value,
   ): void;
 
 }

@@ -43,7 +43,7 @@ class Webform extends SchwabContentSyncFieldProcessorPluginBase implements Conta
     array $configuration,
     $plugin_id,
     $plugin_definition,
-    EntityTypeManagerInterface $entity_type_manager
+    EntityTypeManagerInterface $entity_type_manager,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 

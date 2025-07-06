@@ -265,7 +265,7 @@ class ContentImporterTest extends KernelTestBase {
   protected function getTestNodeData(
     string $nodeUuid,
     string $title,
-    bool $includeCustomFields = FALSE
+    bool $includeCustomFields = FALSE,
   ): array {
     $data = [
       'entity_type' => 'node',
@@ -376,7 +376,7 @@ class ContentImporterTest extends KernelTestBase {
    */
   protected function assertTestTermCreated(
     EntityInterface $term,
-    string $termUuid
+    string $termUuid,
   ) {
     $this->assertInstanceOf(TermInterface::class, $term);
     $this->assertFalse($term->isNew());

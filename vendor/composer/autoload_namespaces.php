@@ -6,6 +6,15 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'org\\bovigo\\vfs\\' => array($vendorDir . '/mikey179/vfsstream/src/main/php'),
+    'WebDriver' => array($vendorDir . '/instaclick/php-webdriver/lib'),
+    'Drupal\\Tests\\Driver' => array($vendorDir . '/drupal/drupal-driver/tests'),
+    'Drupal\\MinkExtension' => array($vendorDir . '/drupal/drupal-extension/src'),
+    'Drupal\\Exception' => array($vendorDir . '/drupal/drupal-extension/src'),
+    'Drupal\\DrupalExtension' => array($vendorDir . '/drupal/drupal-extension/src'),
+    'Drupal\\Drupal' => array($vendorDir . '/drupal/drupal-extension/src'),
+    'Drupal\\Driver' => array($vendorDir . '/drupal/drupal-driver/src'),
     'Console' => array($vendorDir . '/pear/console_getopt'),
+    'Behat\\MinkExtension' => array($vendorDir . '/friends-of-behat/mink-extension/src'),
     'Archive_Tar' => array($vendorDir . '/pear/archive_tar'),
 );

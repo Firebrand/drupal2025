@@ -64,6 +64,9 @@ class ContentSyncConfigForm extends ConfigFormBase {
    *   The entity type manager.
    * @param \Drupal\Core\Entity\EntityTypeBundleInfoInterface $entity_type_bundle_info
    *   The entity bundle info.
+   * @param \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface $stream_wrapper_manager
+   *   The stream wrapper manager.
+   *   The entity bundle info.
    */
   public function __construct(ConfigFactoryInterface $config_factory, TypedConfigManagerInterface $typed_config_manager, EntityTypeManagerInterface $entity_type_manager, EntityTypeBundleInfoInterface $entity_type_bundle_info, StreamWrapperManagerInterface $stream_wrapper_manager) {
     // Still support older drupal version is one argument for the constructor.
@@ -133,7 +136,7 @@ class ContentSyncConfigForm extends ConfigFormBase {
     $entity_types = $this->entityTypeManager->getDefinitions();
     $allowed_types = [
       '#prefix' => '<h4>' . $this->t('Allowed content to export') . '</h4>',
-      '#tree' => TRUE
+      '#tree' => TRUE,
     ];
     foreach ($entity_types as $entity_type) {
       if (!$entity_type->hasLinkTemplate('single-content:export')) {

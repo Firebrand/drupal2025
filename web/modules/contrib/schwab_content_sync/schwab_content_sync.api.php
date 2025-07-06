@@ -80,7 +80,7 @@ function hook_content_export_entity_alter(array &$base_fields, FieldableEntityIn
  * @see \Drupal\schwab_content_sync\ContentImporter::doImport()
  * @see \Drupal\schwab_content_sync\Event\ImportEvent
  */
-function hook_content_import_entity_alter(array $content, FieldableEntityInterface &$entity = NULL) {
+function hook_content_import_entity_alter(array $content, ?FieldableEntityInterface &$entity = NULL) {
   switch ($content['entity_type']) {
     case 'my_custom_entity_type':
       $storage = \Drupal::entityTypeManager()->getStorage('my_custom_entity_type');

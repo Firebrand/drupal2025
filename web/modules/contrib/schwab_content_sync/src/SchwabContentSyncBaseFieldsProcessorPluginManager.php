@@ -46,7 +46,7 @@ class SchwabContentSyncBaseFieldsProcessorPluginManager extends DefaultPluginMan
     \Traversable $namespaces,
     CacheBackendInterface $cacheBackend,
     ModuleHandlerInterface $moduleHandler,
-    EntityTypeManagerInterface $entity_type_manager
+    EntityTypeManagerInterface $entity_type_manager,
   ) {
     parent::__construct(
       'Plugin/SchwabContentSyncBaseFieldsProcessor',

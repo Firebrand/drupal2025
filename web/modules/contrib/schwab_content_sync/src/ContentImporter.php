@@ -14,7 +14,6 @@ use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\TypedData\TranslatableInterface;
-use Drupal\file\FileInterface;
 use Drupal\schwab_content_sync\Event\ImportEvent;
 use Drupal\schwab_content_sync\Event\ImportFieldEvent;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -118,7 +117,7 @@ class ContentImporter implements ContentImporterInterface {
    * @param \Symfony\Component\EventDispatcher\EventDispatcherInterface $event_dispatcher
    *   The event dispatcher.
    * @param \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface $stream_wrapper_manager
-   *  The stream wrapper manager.
+   *   The stream wrapper manager.
    */
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
@@ -130,7 +129,7 @@ class ContentImporter implements ContentImporterInterface {
     SchwabContentSyncFieldProcessorPluginManagerInterface $field_processor_plugin_manager,
     SchwabContentSyncBaseFieldsProcessorPluginManagerInterface $entity_base_fields_processor_plugin_manager,
     EventDispatcherInterface $event_dispatcher,
-    StreamWrapperManagerInterface $stream_wrapper_manager
+    StreamWrapperManagerInterface $stream_wrapper_manager,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->entityRepository = $entity_repository;

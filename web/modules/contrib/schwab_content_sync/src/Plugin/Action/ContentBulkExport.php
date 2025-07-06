@@ -5,7 +5,6 @@ namespace Drupal\schwab_content_sync\Plugin\Action;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Action\ConfigurableActionBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\Link;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\schwab_content_sync\ContentFileGeneratorInterface;
@@ -94,7 +93,7 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
     $extract_assets = $this->configuration['assets'];
     $file = $this->fileGenerator->generateBulkZipFile($entities, $extract_translations, $extract_assets);
 
-    $response = new StreamedResponse(static function() use ($file) {
+    $response = new StreamedResponse(static function () use ($file) {
       $fp = fopen($file->getFileUri(), 'rb');
 
       while (!feof($fp)) {
@@ -121,7 +120,7 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
   /**
    * {@inheritdoc}
    */
-  public function access($object, AccountInterface $account = NULL, $return_as_object = FALSE) {
+  public function access($object, ?AccountInterface $account = NULL, $return_as_object = FALSE) {
     $result = AccessResult::allowedIfHasPermission($account, 'export single content');
 
     if (!$this->contentSyncHelper->access($object)) {

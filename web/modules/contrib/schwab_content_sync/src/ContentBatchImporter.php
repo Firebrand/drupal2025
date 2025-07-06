@@ -69,7 +69,8 @@ class ContentBatchImporter {
         $file->delete();
       }
       catch (\Exception $exception) {
-        \Drupal::logger('schwab_content_sync')->error(sprintf('Could not delete temporary file due to error: %s', $exception->getMessage()));;
+        \Drupal::logger('schwab_content_sync')->error(sprintf('Could not delete temporary file due to error: %s', $exception->getMessage()));
+
       }
     }
   }

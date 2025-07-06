@@ -138,7 +138,7 @@ class ContentExporter implements ContentExporterInterface {
     EntityRepositoryInterface $entity_repository,
     SchwabContentSyncFieldProcessorPluginManagerInterface $field_processor_plugin_manager,
     SchwabContentSyncBaseFieldsProcessorPluginManagerInterface $entity_base_fields_processor_plugin_manager,
-    EventDispatcherInterface $event_dispatcher
+    EventDispatcherInterface $event_dispatcher,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->moduleHandler = $module_handler;

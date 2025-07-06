@@ -2,14 +2,12 @@
 
 namespace Drupal\schwab_content_sync\Plugin\SchwabContentSyncBaseFieldsProcessor;
 
-use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\ContentImporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncBaseFieldsProcessorPluginBase;
-use Drupal\user\EntityOwnerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**

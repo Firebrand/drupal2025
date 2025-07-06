@@ -87,13 +87,13 @@ class LayoutSection extends SchwabContentSyncFieldProcessorPluginBase implements
    */
   public function __construct(
     array $configuration,
-   $plugin_id,
-   $plugin_definition,
+    $plugin_id,
+    $plugin_definition,
     ContentExporterInterface $exporter,
     ContentImporterInterface $importer,
     EntityTypeManagerInterface $entityTypeManager,
     ModuleHandlerInterface $moduleHandler,
-    ?InlineBlockUsageInterface $inline_block_usage
+    ?InlineBlockUsageInterface $inline_block_usage,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 
@@ -196,7 +196,8 @@ class LayoutSection extends SchwabContentSyncFieldProcessorPluginBase implements
 
     // Get unserialized version of each section.
     /** @var \Drupal\layout_builder\Section[] $sections */
-    // Get unserialized version of each section, supporting both old and new formats.
+    // Get unserialized version of each section,
+    // supporting both old and new formats.
     if (isset($value['sections']) && is_string($value['sections'])) {
       // Backward compatibility: decode and unserialize old base64 format.
       $base64_sections = base64_decode($value['sections']);
@@ -206,16 +207,18 @@ class LayoutSection extends SchwabContentSyncFieldProcessorPluginBase implements
           'allowed_classes' => [Section::class, SectionComponent::class],
         ]);
       }, explode('|', $base64_sections));
-    } elseif (isset($value['sections']) && is_array($value['sections'])) {
+    }
+    elseif (isset($value['sections']) && is_array($value['sections'])) {
       // New format: Convert stored section arrays back into Section objects.
       /** @var \Drupal\layout_builder\Section[] $sections */
       $sections = array_map(function (array $section_array) {
         return Section::fromArray($section_array);
       }, $value['sections']);
-    } else {
+    }
+    else {
       // If sections are missing or invalid, throw an exception.
       throw new \Exception('Invalid or missing section data format.');
-    }   
+    }
 
     foreach ($sections as $section) {
       $section_components = $section->getComponents();

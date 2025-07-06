@@ -25,7 +25,7 @@ interface SchwabContentSyncFieldProcessorPluginManagerInterface extends PluginMa
   public function findFieldPluginDefinition(
     string $entityType,
     string $bundle,
-    string $fieldName
+    string $fieldName,
   ): ?array;
 
   /**
@@ -47,7 +47,7 @@ interface SchwabContentSyncFieldProcessorPluginManagerInterface extends PluginMa
   public function getFieldPluginInstance(
     string $entityType,
     string $bundle,
-    string $fieldName
+    string $fieldName,
   ): SchwabContentSyncFieldProcessorInterface;
 
 }

@@ -69,7 +69,7 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
    * @param \Drupal\Core\Entity\EntityRepositoryInterface $entity_repository
    *   The entity repository service.
    * @param \Drupal\Core\TempStore\PrivateTempStore $private_temp_store
-   *    The module private temporary storage.
+   *   The module private temporary storage.
    */
   public function __construct(
     array $configuration,
@@ -78,7 +78,7 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
     ContentExporterInterface $exporter,
     ContentImporterInterface $importer,
     EntityRepositoryInterface $entity_repository,
-    PrivateTempStore $private_temp_store
+    PrivateTempStore $private_temp_store,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 

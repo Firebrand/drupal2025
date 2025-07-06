@@ -8,7 +8,6 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
-use Drupal\schwab_content_sync\Annotation\SchwabContentSyncFieldProcessor;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\ContentImporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncFieldProcessorPluginBase;
@@ -78,7 +77,7 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
     ContentExporterInterface $exporter,
     ContentImporterInterface $importer,
     EntityRepositoryInterface $entity_repository,
-    EntityTypeManagerInterface $entity_type_manager
+    EntityTypeManagerInterface $entity_type_manager,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 

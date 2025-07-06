@@ -15,7 +15,9 @@
         }
     ],
     "require": {
+        "commerceguys/addressing": "^2.2",
         "composer/installers": "^2.0",
+        "drupal/address": "^2.0",
         "drupal/admin_toolbar": "^3.6",
         "drupal/core-composer-scaffold": "^10.4",
         "drupal/core-project-message": "^10.4",
@@ -98,5 +100,14 @@
                 "      composer remove drupal/core-project-message"
             ]
         }
+    },
+    "require-dev": {
+        "behat/mink": "^1.12",
+        "drupal/coder": "^8.3",
+        "drupal/drupal-extension": "^5.1",
+        "mikey179/vfsstream": "^1.6",
+        "phpspec/prophecy-phpunit": "^2.4",
+        "phpunit/phpunit": "^9.6",
+        "symfony/phpunit-bridge": "^7.3"
     }
 }

@@ -98,7 +98,7 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
     ContentSyncHelperInterface $content_sync_helper,
     FileSystemInterface $file_system,
     ConfigFactoryInterface $config_factory,
-    FocalPointManagerInterface $focal_point_manager = NULL
+    ?FocalPointManagerInterface $focal_point_manager = NULL,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 

@@ -91,9 +91,6 @@ class ContentExportForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $parameters = $this->getRouteMatch()->getParameters();
-    $entity = $this->contentSyncHelper->getDefaultLanguageEntity($parameters);
-
     $form['deploy_message'] = [
       '#type' => 'markup',
       '#markup' => $this->t('By using the generated file you can import content on deploy'),
@@ -113,8 +110,6 @@ class ContentExportForm extends FormBase {
     return $form;
   }
 
-
-
   /**
    * {@inheritdoc}
    */
@@ -124,7 +119,7 @@ class ContentExportForm extends FormBase {
     $file_name = $this->contentSyncHelper->generateContentFileName($entity);
 
     // Stream a zip with assets.
-    $response = new StreamedResponse(function() use ($entity) {
+    $response = new StreamedResponse(function () use ($entity) {
       $file = $this->fileGenerator->generateZipFile($entity, FALSE);
       $fp = fopen($file->getFileUri(), 'rb');
 
