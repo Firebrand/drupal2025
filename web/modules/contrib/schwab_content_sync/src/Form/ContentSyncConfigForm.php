@@ -13,7 +13,7 @@ use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Defines a form to configure Single Content Sync settings.
+ * Defines a form to configure Schwab Content Sync settings.
  *
  * @package Drupal\schwab_content_sync\Form
  */

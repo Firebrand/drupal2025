@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Single Content Sync module functionality.
+ * Schwab Content Sync module functionality.
  */
 
 use Drupal\Core\Access\AccessResult;

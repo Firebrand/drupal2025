@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Single Content Sync API documentation.
+ * Schwab Content Sync API documentation.
  */
 
 /**

@@ -9,7 +9,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Routing\Route;
 
 /**
- * Subscriber for single content sync routes.
+ * Subscriber for schwab content sync routes.
  */
 class ContentExportRoutes implements ContainerInjectionInterface {
 

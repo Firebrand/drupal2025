@@ -1,4 +1,4 @@
-# Single Content Sync
+# Schwab Content Sync
 
 A simple way to export/import a node content with all entity references.
 

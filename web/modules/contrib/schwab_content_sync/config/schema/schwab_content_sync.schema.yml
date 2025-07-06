@@ -11,7 +11,7 @@ action.configuration.content_bulk_export:
 
 schwab_content_sync.settings:
   type: config_object
-  label: 'Single Content Sync settings'
+  label: 'Schwab Content Sync settings'
   mapping:
     allowed_entity_types:
       type: sequence

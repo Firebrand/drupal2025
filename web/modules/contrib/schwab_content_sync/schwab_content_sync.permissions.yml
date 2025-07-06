@@ -7,5 +7,5 @@ import single content:
 permission_callbacks:
   - \Drupal\schwab_content_sync\ContentSyncPermissions::permissions
 
-administer single content sync:
-  title: 'Administer Single Content Sync settings'
+administer schwab content sync:
+  title: 'Administer Schwab Content Sync settings'
