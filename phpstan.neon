@@ -1,0 +1,38 @@
+includes:
+  - phar://phpstan.phar/conf/bleedingEdge.neon
+parameters:
+  level: 9
+  ignoreErrors:
+    - "#Plugin definitions cannot be altered.#"
+    - "#Unsafe usage of new static#"
+    - "#Cannot access offset [a-zA-Z0-9\\_'\\#]+ on mixed.#"
+    -
+      message: "#^Function [a-zA-Z0-9\\_\\\\:\\(\\)]+ has no return type specified\\.#"
+      paths:
+        - "*/*.inc"
+        - "*/*.install"
+        - "*/*.module"
+        - "*/*.theme"
+    -
+      message: "#^Function [a-zA-Z0-9\\_\\\\:\\(\\)]+ has parameter \\$[a-zA-Z0-9_]+ with no value type specified in iterable type array\\.$#"
+      paths:
+        - "*/*.inc"
+        - "*/*.module"
+        - "*/*.theme"
+    -
+      message: "#^Function [a-zA-Z0-9\\_\\\\:\\(\\)]+ has parameter \\$[a-zA-Z0-9_]+ with no type specified\\.$#"
+      paths:
+        - "*/*.inc"
+        - "*/*.install"
+        - "*/*.module"
+        - "*/*.theme"
+        - "*/*.post_update.php"  
+  excludePaths:
+    - */libraries/*
+    - */tests/*
+    - */config/*
+    - */vendor/*
+    - */settings*.php
+  phpVersion: 80300
+
+      

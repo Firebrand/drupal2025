@@ -105,8 +105,12 @@
         "behat/mink": "^1.12",
         "drupal/coder": "^8.3",
         "drupal/drupal-extension": "^5.1",
+        "mglaman/phpstan-drupal": "^2.0",
         "mikey179/vfsstream": "^1.6",
         "phpspec/prophecy-phpunit": "^2.4",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpunit/phpunit": "^9.6",
         "symfony/phpunit-bridge": "^7.3"
     }
