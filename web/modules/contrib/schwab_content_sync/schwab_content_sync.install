@@ -9,10 +9,14 @@ use Drupal\Core\Config\FileStorage;
 
 /**
  * Import action config.
+ *
+ * @param array<string, mixed> $sandbox
+ *   The sandbox array for batch processing.
  */
-function schwab_content_sync_update_9121(&$sandbox) {
+function schwab_content_sync_update_9121(array &$sandbox): void {
   // Get file storage of optional configs in the module.
-  $config_path = \Drupal::service('extension.list.module')->getPath('schwab_content_sync') . '/config/install';
+  $module_handler = \Drupal::moduleHandler();
+  $config_path = $module_handler->getModule('schwab_content_sync')->getPath() . '/config/install';
   $source = new FileStorage($config_path);
 
   /** @var \Drupal\Core\Config\StorageInterface $config_storage */
@@ -23,16 +27,23 @@ function schwab_content_sync_update_9121(&$sandbox) {
   ];
 
   foreach ($config_names as $config_name) {
-    $config_storage->write($config_name, $source->read($config_name));
+    $data = $source->read($config_name);
+    if ($data !== FALSE) {
+      $config_storage->write($config_name, $data);
+    }
   }
 }
 
 /**
  * Init module settings config.
+ *
+ * @param array<string, mixed> $sandbox
+ *   The sandbox array for batch processing.
  */
-function schwab_content_sync_update_9130(&$sandbox) {
+function schwab_content_sync_update_9130(array &$sandbox): void {
   // Get file storage of optional configs in the module.
-  $config_path = \Drupal::service('extension.list.module')->getPath('schwab_content_sync') . '/config/install';
+  $module_handler = \Drupal::moduleHandler();
+  $config_path = $module_handler->getModule('schwab_content_sync')->getPath() . '/config/install';
   $source = new FileStorage($config_path);
 
   /** @var \Drupal\Core\Config\StorageInterface $config_storage */
@@ -43,27 +54,36 @@ function schwab_content_sync_update_9130(&$sandbox) {
   ];
 
   foreach ($config_names as $config_name) {
-    $config_storage->write($config_name, $source->read($config_name));
+    $data = $source->read($config_name);
+    if ($data !== FALSE) {
+      $config_storage->write($config_name, $data);
+    }
   }
 }
 
 /**
  * Update configuration to support bundles.
  */
-function schwab_content_sync_update_9131() {
+function schwab_content_sync_update_9131(): void {
   $config = \Drupal::configFactory()
     ->getEditable('schwab_content_sync.settings');
   $allowed_entity_types = $config->get('allowed_entity_types');
-  foreach ($allowed_entity_types as &$allowed_type) {
-    $allowed_type = [];
+  
+  if (is_array($allowed_entity_types)) {
+    foreach ($allowed_entity_types as &$allowed_type) {
+      $allowed_type = [];
+    }
+    $config->set('allowed_entity_types', $allowed_entity_types)->save();
   }
-  $config->set('allowed_entity_types', $allowed_entity_types)->save();
 }
 
 /**
  * Update module configuration with 'Site UUID check' setting.
+ *
+ * @param array<string, mixed> $sandbox
+ *   The sandbox array for batch processing.
  */
-function schwab_content_sync_update_9132(&$sandbox) {
+function schwab_content_sync_update_9132(array &$sandbox): void {
   \Drupal::configFactory()->getEditable('schwab_content_sync.settings')
     ->set('site_uuid_check', TRUE)
     ->save();
@@ -71,21 +91,35 @@ function schwab_content_sync_update_9132(&$sandbox) {
 
 /**
  * Restructure schwab_content_sync.setting:allowed_entity_types.
+ *
+ * @param array<string, mixed> $sandbox
+ *   The sandbox array for batch processing.
  */
-function schwab_content_sync_update_9133(&$sandbox): void {
+function schwab_content_sync_update_9133(array &$sandbox): void {
   $config = \Drupal::configFactory()->getEditable('schwab_content_sync.settings');
-  $allowed_entity_types = [];
-  foreach ($config->get('allowed_entity_types') as $entity_type => $bundles) {
-    $allowed_entity_types[$entity_type] = array_keys($bundles);
+  $existing_allowed_types = $config->get('allowed_entity_types');
+  
+  if (is_array($existing_allowed_types)) {
+    $allowed_entity_types = [];
+    foreach ($existing_allowed_types as $entity_type => $bundles) {
+      if (is_array($bundles)) {
+        $allowed_entity_types[$entity_type] = array_keys($bundles);
+      } else {
+        $allowed_entity_types[$entity_type] = [];
+      }
+    }
+    $config->set('allowed_entity_types', $allowed_entity_types);
+    $config->save(TRUE);
   }
-  $config->set('allowed_entity_types', $allowed_entity_types);
-  $config->save(TRUE);
 }
 
 /**
  * Update module configuration with 'Import/export directory schema' setting.
+ *
+ * @param array<string, mixed> $sandbox
+ *   The sandbox array for batch processing.
  */
-function schwab_content_sync_update_9134(&$sandbox): void {
+function schwab_content_sync_update_9134(array &$sandbox): void {
   // Set the value that was previously hardcoded.
   \Drupal::configFactory()->getEditable('schwab_content_sync.settings')
     ->set('import_directory_schema', 'temporary')
