@@ -3,6 +3,7 @@
 namespace Drupal\schwab_content_sync;
 
 use Drupal\Component\Datetime\TimeInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityRepositoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -10,6 +11,7 @@ use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Entity\RevisionableInterface;
 use Drupal\Core\Entity\RevisionLogInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\File\FileExists;
 use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
@@ -145,8 +147,19 @@ class ContentImporter implements ContentImporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $content
+   *   The content array to import.
    */
   public function doImport(array $content): EntityInterface {
+    if (!isset($content['entity_type']) || !is_string($content['entity_type'])) {
+      throw new \InvalidArgumentException('Content must have a valid entity_type.');
+    }
+    
+    if (!isset($content['uuid']) || !is_string($content['uuid'])) {
+      throw new \InvalidArgumentException('Content must have a valid uuid.');
+    }
+    
     $storage = $this->entityTypeManager->getStorage($content['entity_type']);
     $definition = $this->entityTypeManager->getDefinition($content['entity_type']);
 
@@ -155,6 +168,7 @@ class ContentImporter implements ContentImporterInterface {
 
     // If not, create a new instance of the entity.
     if (!$entity) {
+      /** @var array<string, mixed> $values */
       $values = [
         'uuid' => $content['uuid'],
       ];
@@ -171,18 +185,18 @@ class ContentImporter implements ContentImporterInterface {
           $entity->setNewRevision();
           $entity->setRevisionCreationTime($this->time->getCurrentTime());
 
-          if (isset($content['base_fields']['revision_uid'])) {
+          if (isset($content['base_fields']['revision_uid']) && is_int($content['base_fields']['revision_uid'])) {
             $entity->setRevisionUserId($content['base_fields']['revision_uid']);
           }
 
-          if (isset($content['base_fields']['revision_log_message'])) {
+          if (isset($content['base_fields']['revision_log_message']) && is_string($content['base_fields']['revision_log_message'])) {
             $entity->setRevisionLogMessage($content['base_fields']['revision_log_message']);
           }
         }
         break;
 
       case 'taxonomy_term':
-        if ($content['base_fields']['parent']) {
+        if (isset($content['base_fields']['parent']) && is_array($content['base_fields']['parent']) && $entity instanceof ContentEntityInterface) {
           $entity->set('parent', $this->doImport($content['base_fields']['parent']));
         }
         break;
@@ -194,13 +208,18 @@ class ContentImporter implements ContentImporterInterface {
         break;
     }
 
-    $importEvent = new ImportEvent($entity, $content);
-    $this->eventDispatcher->dispatch($importEvent);
-    $entity = $importEvent->getEntity();
-    $content = $importEvent->getContent();
+    // Only dispatch event if entity is a ContentEntityInterface
+    if ($entity instanceof ContentEntityInterface) {
+      $importEvent = new ImportEvent($entity, $content);
+      $this->eventDispatcher->dispatch($importEvent);
+      $entity = $importEvent->getEntity();
+      $content = $importEvent->getContent();
+    }
 
     // Import values from base fields.
-    $this->importBaseValues($entity, $content['base_fields']);
+    if ($entity instanceof FieldableEntityInterface && isset($content['base_fields']) && is_array($content['base_fields'])) {
+      $this->importBaseValues($entity, $content['base_fields']);
+    }
 
     // Alter importing entity by using hook_content_import_entity_alter().
     $this->moduleHandler->alterDeprecated(
@@ -211,24 +230,44 @@ class ContentImporter implements ContentImporterInterface {
     );
 
     // Import values from custom fields.
-    $this->importCustomValues($entity, $content['custom_fields']);
+    if ($entity instanceof FieldableEntityInterface && isset($content['custom_fields']) && is_array($content['custom_fields'])) {
+      $this->importCustomValues($entity, $content['custom_fields']);
+    }
+    
     $this->createOrUpdate($entity);
 
     // Import menu link when entity is created.
-    if (isset($content['base_fields']['menu_link'])) {
+    if (isset($content['base_fields']['menu_link']) && is_array($content['base_fields']['menu_link'])) {
       $this->doImport($content['base_fields']['menu_link']);
     }
 
     // Sync translations of the entity.
-    if (isset($content['translations']) && $entity instanceof TranslatableInterface) {
-      foreach ($content['translations'] as $langcode => $translation_content) {
+    if (isset($content['translations']) && is_array($content['translations']) && $entity instanceof TranslatableInterface) {
+      /** @var array<string, array<string, mixed>> $translations */
+      $translations = $content['translations'];
+      foreach ($translations as $langcode => $translation_content) {
+        if (!is_string($langcode) || !is_array($translation_content)) {
+          continue;
+        }
+        
         $translated_entity = !$entity->hasTranslation($langcode) ? $entity->addTranslation($langcode) : $entity->getTranslation($langcode);
 
-        $this->importBaseValues($translated_entity, $translation_content['base_fields']);
-        $this->importCustomValues($translated_entity, $translation_content['custom_fields']);
+        if ($translated_entity instanceof FieldableEntityInterface && isset($translation_content['base_fields']) && is_array($translation_content['base_fields'])) {
+          /** @var array<string, mixed> $base_fields */
+          $base_fields = $translation_content['base_fields'];
+          $this->importBaseValues($translated_entity, $base_fields);
+        }
+        
+        if ($translated_entity instanceof FieldableEntityInterface && isset($translation_content['custom_fields']) && is_array($translation_content['custom_fields'])) {
+          /** @var array<string, mixed> $custom_fields */
+          $custom_fields = $translation_content['custom_fields'];
+          $this->importCustomValues($translated_entity, $custom_fields);
+        }
 
-        $translated_entity->set('content_translation_source', $entity->language()->getId());
-        $translated_entity->save();
+        if ($translated_entity instanceof ContentEntityInterface) {
+          $translated_entity->set('content_translation_source', $entity->language()->getId());
+          $translated_entity->save();
+        }
       }
     }
 
@@ -250,11 +289,15 @@ class ContentImporter implements ContentImporterInterface {
    */
   public function createOrUpdate(EntityInterface &$entity): void {
     $definition = $this->entityTypeManager->getDefinition($entity->getEntityTypeId());
-    $existing_entity = $this->entityRepository->loadEntityByUuid($entity->getEntityTypeId(), $entity->uuid());
+    $uuid = $entity->uuid();
+    
+    if ($uuid !== NULL) {
+      $existing_entity = $this->entityRepository->loadEntityByUuid($entity->getEntityTypeId(), $uuid);
 
-    if ($existing_entity) {
-      $entity->{$definition->getKey('id')} = $existing_entity->id();
-      $entity->enforceIsNew(FALSE);
+      if ($existing_entity) {
+        $entity->{$definition->getKey('id')} = $existing_entity->id();
+        $entity->enforceIsNew(FALSE);
+      }
     }
 
     $entity->save();
@@ -262,6 +305,9 @@ class ContentImporter implements ContentImporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $fields
+   *   The custom fields to import.
    */
   public function importCustomValues(FieldableEntityInterface $entity, array $fields): void {
     foreach ($fields as $field_name => $field_value) {
@@ -271,6 +317,9 @@ class ContentImporter implements ContentImporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $fields
+   *   The base fields to import.
    */
   public function importBaseValues(FieldableEntityInterface $entity, array $fields): void {
     $entityProcessor = $this->entityBaseFieldsProcessorPluginManager
@@ -330,11 +379,13 @@ class ContentImporter implements ContentImporterInterface {
       );
 
     // If field type is not supported, it will simply set value as it is.
-    $fieldProcessor->importFieldValue($entity, $field_name, $field_value);
+    if (is_array($field_value)) {
+      $fieldProcessor->importFieldValue($entity, $field_name, $field_value);
 
-    // But you can alter it by implementing an event subscriber.
-    $event = new ImportFieldEvent($entity, $field_name, $field_value);
-    $this->eventDispatcher->dispatch($event);
+      // But you can alter it by implementing an event subscriber.
+      $event = new ImportFieldEvent($entity, $field_name, $field_value);
+      $this->eventDispatcher->dispatch($event);
+    }
 
     // Alter setting a field value during the import by using
     // hook_content_import_field_value().
@@ -372,15 +423,17 @@ class ContentImporter implements ContentImporterInterface {
   protected function isZipFileValid(string $path): bool {
     $info = pathinfo($path);
 
-    if (is_file($path) && $info['extension'] === 'yml') {
+    if (is_file($path) && isset($info['extension']) && $info['extension'] === 'yml') {
       // Extra directory found, let's skip the operation and trigger
       // an error later.
-      [, $directory] = explode('://', $info['dirname']);
+      if (isset($info['dirname'])) {
+        [, $directory] = explode('://', $info['dirname']);
 
-      // If there are more than 3 parts, then there is an extra folder.
-      // e.g. import/zip/uuid is correct one.
-      if (count(explode('/', $directory)) > 3) {
-        return FALSE;
+        // If there are more than 3 parts, then there is an extra folder.
+        // e.g. import/zip/uuid is correct one.
+        if (count(explode('/', $directory)) > 3) {
+          return FALSE;
+        }
       }
 
       // File name can't start with dot.
@@ -472,13 +525,36 @@ class ContentImporter implements ContentImporterInterface {
 
     $directory = $this->fileSystem->dirname($destination);
     $this->contentSyncHelper->prepareFilesDirectory($directory);
-    $this->fileSystem->move($extracted_file_path, $destination, FileSystemInterface::EXISTS_REPLACE);
+    
+    // Use FileExists::Replace instead of deprecated constant
+    if (class_exists(FileExists::class)) {
+      $this->fileSystem->move($extracted_file_path, $destination, FileExists::Replace);
+    } else {
+      // @phpstan-ignore-next-line
+      $this->fileSystem->move($extracted_file_path, $destination, FileSystemInterface::EXISTS_REPLACE);
+    }
   }
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $entity
+   *   The entity data array.
    */
   public function createStubEntity(array $entity): EntityInterface {
+    if (!isset($entity['entity_type']) || !is_string($entity['entity_type'])) {
+      throw new \InvalidArgumentException('Entity data must have a valid entity_type.');
+    }
+    
+    if (!isset($entity['uuid']) || !is_string($entity['uuid'])) {
+      throw new \InvalidArgumentException('Entity data must have a valid uuid.');
+    }
+    
+    if (!isset($entity['base_fields']) || !is_array($entity['base_fields'])) {
+      throw new \InvalidArgumentException('Entity data must have valid base_fields.');
+    }
+    
+    /** @var array<string, mixed> $stub_entity_values */
     $stub_entity_values = [
       'uuid' => $entity['uuid'],
     ];
@@ -487,7 +563,13 @@ class ContentImporter implements ContentImporterInterface {
       $stub_entity_values[$bundle_key] = $entity['bundle'];
     }
     $stub_entity = $this->entityTypeManager->getStorage($entity['entity_type'])->create($stub_entity_values);
-    $this->importBaseValues($stub_entity, $entity['base_fields']);
+    
+    if ($stub_entity instanceof FieldableEntityInterface) {
+      /** @var array<string, mixed> $base_fields */
+      $base_fields = $entity['base_fields'];
+      $this->importBaseValues($stub_entity, $base_fields);
+    }
+    
     $stub_entity->save();
 
     return $stub_entity;
@@ -495,6 +577,9 @@ class ContentImporter implements ContentImporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $entity
+   *   The entity data array.
    */
   public function isFullEntity(array $entity): bool {
     return isset($entity['uuid'])

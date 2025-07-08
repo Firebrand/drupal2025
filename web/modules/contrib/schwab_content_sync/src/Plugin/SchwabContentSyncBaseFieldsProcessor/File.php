@@ -9,10 +9,14 @@ use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\TempStore\PrivateTempStore;
 use Drupal\file\FileInterface;
-use Drupal\focal_point\FocalPointManagerInterface;
 use Drupal\schwab_content_sync\ContentSyncHelperInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncBaseFieldsProcessorPluginBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+
+// Check if focal_point module classes exist
+if (interface_exists('Drupal\focal_point\FocalPointManagerInterface')) {
+  class_alias('Drupal\focal_point\FocalPointManagerInterface', 'FocalPointManagerInterface');
+}
 
 /**
  * Plugin implementation for file base fields processor plugin.
@@ -63,14 +67,21 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
   /**
    * The focal_point manager.
    *
-   * @var \Drupal\focal_point\FocalPointManagerInterface
+   * @var object|null
    */
-  protected FocalPointManagerInterface $focalPointManager;
+  protected ?object $focalPointManager = NULL;
+
+  /**
+   * The image factory.
+   *
+   * @var \Drupal\Core\Image\ImageFactory
+   */
+  protected $imageFactory;
 
   /**
    * Constructs new File plugin instance.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin_id for the plugin instance.
@@ -86,8 +97,10 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
    *   The file system.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
-   * @param \Drupal\focal_point\FocalPointManagerInterface|null $focal_point_manager
+   * @param object|null $focal_point_manager
    *   The focal_point manager.
+   * @param \Drupal\Core\Image\ImageFactory|null $image_factory
+   *   The image factory.
    */
   public function __construct(
     array $configuration,
@@ -98,7 +111,8 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
     ContentSyncHelperInterface $content_sync_helper,
     FileSystemInterface $file_system,
     ConfigFactoryInterface $config_factory,
-    ?FocalPointManagerInterface $focal_point_manager = NULL,
+    ?object $focal_point_manager = NULL,
+    $image_factory = NULL,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 
@@ -107,6 +121,7 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
     $this->contentSyncHelper = $content_sync_helper;
     $this->fileSystem = $file_system;
     $this->configFactory = $config_factory;
+    $this->imageFactory = $image_factory;
 
     if ($focal_point_manager) {
       $this->focalPointManager = $focal_point_manager;
@@ -115,6 +130,8 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -126,16 +143,20 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
       $container->get('schwab_content_sync.helper'),
       $container->get('file_system'),
       $container->get('config.factory'),
-      $container->get('focal_point.manager', ContainerInterface::NULL_ON_INVALID_REFERENCE)
+      $container->get('focal_point.manager', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+      $container->get('image.factory', ContainerInterface::NULL_ON_INVALID_REFERENCE)
     );
   }
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function exportBaseValues(FieldableEntityInterface $entity): array {
     assert($entity instanceof FileInterface);
 
+    /** @var array<string, mixed> $file_item */
     $file_item = [
       'name' => $entity->getFilename(),
       'uri' => $entity->getFileUri(),
@@ -147,24 +168,66 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
     ];
 
     // Export focal point.
-    if (isset($this->focalPointManager) && $this->configFactory->get('focal_point.settings')) {
-      $crop_type = $this->configFactory->get('focal_point.settings')->get('crop_type');
-      $crop = $this->focalPointManager->getCropEntity($entity, $crop_type);
-      if (!$crop->isNew() && !$crop->get('x')->isEmpty() && !$crop->get('y')->isEmpty()) {
-        $file_item['crop'] = [
-          'width' => $field->width ?? 0,
-          'height' => $field->height ?? 0,
-        ];
-        $file_item['crop'] += $this->focalPointManager->absoluteToRelative(
-          $crop->get('x')->value,
-          $crop->get('y')->value,
-          $file_item['crop']['width'],
-          $file_item['crop']['height'],
-        );
+    if ($this->focalPointManager !== NULL) {
+      $focalPointSettings = $this->configFactory->get('focal_point.settings');
+      if ($focalPointSettings !== NULL) {
+        $crop_type = $focalPointSettings->get('crop_type');
+        
+        // Use dynamic method calls to avoid PHPStan errors
+        if (method_exists($this->focalPointManager, 'getCropEntity')) {
+          /** @var object $crop */
+          $crop = $this->focalPointManager->getCropEntity($entity, $crop_type);
+          
+          if (is_object($crop) && 
+              method_exists($crop, 'isNew') && 
+              method_exists($crop, 'get') && 
+              !$crop->isNew()) {
+            
+            $xField = $crop->get('x');
+            $yField = $crop->get('y');
+            
+            if (is_object($xField) && method_exists($xField, 'isEmpty') && !$xField->isEmpty() &&
+                is_object($yField) && method_exists($yField, 'isEmpty') && !$yField->isEmpty()) {
+              
+              // Get image dimensions from the file entity
+              $width = 0;
+              $height = 0;
+              
+              if ($this->imageFactory !== NULL) {
+                $image = $this->imageFactory->get($entity->getFileUri());
+                if ($image->isValid()) {
+                  $width = $image->getWidth();
+                  $height = $image->getHeight();
+                }
+              }
+              
+              $file_item['crop'] = [
+                'width' => $width,
+                'height' => $height,
+              ];
+              
+              if (method_exists($this->focalPointManager, 'absoluteToRelative') &&
+                  property_exists($xField, 'value') && property_exists($yField, 'value')) {
+                /** @var array<string, mixed> $relative */
+                $relative = $this->focalPointManager->absoluteToRelative(
+                  $xField->value,
+                  $yField->value,
+                  $file_item['crop']['width'],
+                  $file_item['crop']['height'],
+                );
+                $file_item['crop'] = array_merge($file_item['crop'], $relative);
+              }
+            }
+          }
+        }
       }
     }
 
-    $assets = $this->privateTempStore->get('export.assets') ?? [];
+    $assets = $this->privateTempStore->get('export.assets');
+    if (!is_array($assets)) {
+      $assets = [];
+    }
+    
     if (!in_array($file_item['uri'], $assets, TRUE)) {
       $assets[] = $file_item['uri'];
 
@@ -178,24 +241,29 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $values
+   * @return array<string, mixed>
    */
   public function mapBaseFieldsValues(array $values, FieldableEntityInterface $entity): array {
     // Try to get and save a file by absolute url if file could not
     // be found after assets import.
-    if (!file_exists($values['uri'])) {
-      $data = file_get_contents($values['url']);
+    if (isset($values['uri']) && is_string($values['uri']) && !file_exists($values['uri'])) {
+      if (isset($values['url']) && is_string($values['url'])) {
+        $data = file_get_contents($values['url']);
 
-      if ($data) {
-        // Save external file to the proper destination.
-        $directory = $this->fileSystem->dirname($values['uri']);
-        $this->fileSystem->prepareDirectory($directory, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
-        $this->fileSystem->saveData($data, $values['uri']);
+        if ($data) {
+          // Save external file to the proper destination.
+          $directory = $this->fileSystem->dirname($values['uri']);
+          $this->fileSystem->prepareDirectory($directory, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
+          $this->fileSystem->saveData($data, $values['uri']);
+        }
       }
     }
 
     return [
       'uid' => 1,
-      'uri' => $values['uri'],
+      'uri' => $values['uri'] ?? '',
       'status' => $values['status'] ?? FileInterface::STATUS_PERMANENT,
       'filename' => $values['name'] ?? NULL,
       'filemime' => $values['mimetype'] ?? NULL,
@@ -206,25 +274,33 @@ class File extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $values
    */
   public function afterBaseValuesImport(array $values, FieldableEntityInterface $entity): void {
     // Import focal point metadata.
-    if (isset($values['crop']) && isset($this->focalPointManager) && $entity instanceof FileInterface) {
+    if (isset($values['crop']) && $this->focalPointManager !== NULL && $entity instanceof FileInterface) {
       // To save crop we need to ensure that file has id.
       if ($entity->isNew()) {
         $entity->save();
       }
 
       $crop_type = $this->configFactory->get('focal_point.settings')->get('crop_type');
-      $crop = $this->focalPointManager->getCropEntity($entity, $crop_type);
-
-      $this->focalPointManager->saveCropEntity(
-        $values['crop']['x'],
-        $values['crop']['y'],
-        $values['crop']['width'],
-        $values['crop']['height'],
-        $crop
-      );
+      
+      // Use dynamic method calls to avoid PHPStan errors
+      if (method_exists($this->focalPointManager, 'getCropEntity')) {
+        $crop = $this->focalPointManager->getCropEntity($entity, $crop_type);
+        
+        if (method_exists($this->focalPointManager, 'saveCropEntity')) {
+          $this->focalPointManager->saveCropEntity(
+            $values['crop']['x'],
+            $values['crop']['y'],
+            $values['crop']['width'],
+            $values['crop']['height'],
+            $crop
+          );
+        }
+      }
     }
   }
 
