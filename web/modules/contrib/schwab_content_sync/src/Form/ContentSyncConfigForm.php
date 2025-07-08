@@ -43,7 +43,7 @@ class ContentSyncConfigForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container): self {
     return new static(
       $container->get('config.factory'),
       $container->get('config.typed'),
@@ -91,8 +91,10 @@ class ContentSyncConfigForm extends ConfigFormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<int, string>
    */
-  protected function getEditableConfigNames() {
+  protected function getEditableConfigNames(): array {
     return [
       'schwab_content_sync.settings',
     ];
@@ -100,8 +102,16 @@ class ContentSyncConfigForm extends ConfigFormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return array<string, mixed>
+   *   The form structure.
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state): array {
     $config = $this->config('schwab_content_sync.settings');
 
     $form['site_uuid_check'] = [
@@ -134,10 +144,17 @@ class ContentSyncConfigForm extends ConfigFormBase {
     ];
 
     $entity_types = $this->entityTypeManager->getDefinitions();
+    /** @var array<string, mixed> $allowed_types */
     $allowed_types = [
       '#prefix' => '<h4>' . $this->t('Allowed content to export') . '</h4>',
       '#tree' => TRUE,
     ];
+    
+    $allowed_entity_types = $config->get('allowed_entity_types');
+    if (!is_array($allowed_entity_types)) {
+      $allowed_entity_types = [];
+    }
+    
     foreach ($entity_types as $entity_type) {
       if (!$entity_type->hasLinkTemplate('single-content:export')) {
         continue;
@@ -150,20 +167,27 @@ class ContentSyncConfigForm extends ConfigFormBase {
       $allowed_types[$entity_type_id]['enabled'] = [
         '#type' => 'checkbox',
         '#title' => $entity_type->getLabel(),
-        '#default_value' => array_key_exists($entity_type_id, $config->get('allowed_entity_types')),
+        '#default_value' => array_key_exists($entity_type_id, $allowed_entity_types),
       ];
 
       $bundles = $this->entityTypeBundleInfo->getBundleInfo($entity_type_id);
       if ($bundles) {
+        /** @var array<string, string> $bundles_as_options */
         $bundles_as_options = [];
         foreach ($bundles as $bundle_id => $bundle_info) {
           $bundles_as_options[$bundle_id] = $bundle_info['label'] ?? $bundle_id;
         }
+        
+        $default_bundles = $allowed_entity_types[$entity_type_id] ?? [];
+        if (!is_array($default_bundles)) {
+          $default_bundles = [];
+        }
+        
         $allowed_types[$entity_type_id]['bundles'] = [
           '#type' => 'checkboxes',
           '#title' => $entity_type->getBundleLabel(),
           '#options' => $bundles_as_options,
-          '#default_value' => $config->get('allowed_entity_types')[$entity_type_id] ?? [],
+          '#default_value' => $default_bundles,
           '#description_display' => 'before',
           '#description' => $this->t('Leave empty to enable on all @plural_label.', [
             '@plural_label' => $entity_type->getPluralLabel(),
@@ -183,14 +207,27 @@ class ContentSyncConfigForm extends ConfigFormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
     $source = $form_state->getValue('allowed_types');
+    /** @var array<string, array<string>> $allowed_types */
     $allowed_types = [];
-    foreach ($source as $entity_type_id => $info) {
-      if ($info['enabled']) {
-        $bundles = $info['bundles'] ?? [];
-        $allowed_types[$entity_type_id] = array_keys(array_filter($bundles));
+    
+    if (is_array($source)) {
+      foreach ($source as $entity_type_id => $info) {
+        if (is_array($info) && !empty($info['enabled'])) {
+          $bundles = $info['bundles'] ?? [];
+          if (is_array($bundles)) {
+            $allowed_types[$entity_type_id] = array_keys(array_filter($bundles));
+          } else {
+            $allowed_types[$entity_type_id] = [];
+          }
+        }
       }
     }
 

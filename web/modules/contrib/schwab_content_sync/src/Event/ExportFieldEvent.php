@@ -13,23 +13,23 @@ class ExportFieldEvent extends Event {
   /**
    * The field item list being exported.
    *
-   * @var \Drupal\Core\Field\FieldItemListInterface
+   * @var \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface>
    */
   protected FieldItemListInterface $field;
 
   /**
    * The field value to export.
    *
-   * @var array
+   * @var array<int, array<string, mixed>>
    */
   protected array $fieldValue;
 
   /**
    * Constructs a new ExportFieldEvent object.
    *
-   * @param \Drupal\Core\Field\FieldItemListInterface $field
+   * @param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface> $field
    *   The field item list being exported.
-   * @param array $field_value
+   * @param array<int, array<string, mixed>> $field_value
    *   The field value from the field processor.
    */
   public function __construct(FieldItemListInterface $field, array $field_value) {
@@ -40,17 +40,17 @@ class ExportFieldEvent extends Event {
   /**
    * Gets the field item list being exported.
    *
-   * @return \Drupal\Core\Field\FieldItemListInterface
+   * @return \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface>
    *   The field item list object.
    */
-  public function getEntity(): FieldItemListInterface {
+  public function getField(): FieldItemListInterface {
     return $this->field;
   }
 
   /**
    * Gets the field value to export.
    *
-   * @return array
+   * @return array<int, array<string, mixed>>
    *   The field value to export.
    */
   public function getFieldValue(): array {
@@ -60,7 +60,7 @@ class ExportFieldEvent extends Event {
   /**
    * Sets the field value to export.
    *
-   * @param array $field_value
+   * @param array<int, array<string, mixed>> $field_value
    *   The field value to export. The same array keys should be preserved as
    *   returned by getFieldValue().
    *

@@ -48,7 +48,7 @@ class ContentImportForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container): self {
     return new static(
       $container->get('schwab_content_sync.importer'),
       $container->get('schwab_content_sync.helper')
@@ -64,14 +64,24 @@ class ContentImportForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return array<string, mixed>
+   *   The form structure.
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state): array {
+    /** @var array<string, mixed> $validators */
     $validators = [];
 
     // Still support older drupal version than 10.2 with old file extension
     // validator approach.
     if (floatval(\Drupal::VERSION) < 10.2) {
       $validators['file_validate_extensions'] = ['zip yml'];
+      // @phpstan-ignore-next-line
       $max_upload_size = format_size(Environment::getUploadMaxSize());
     }
     else {
@@ -104,8 +114,13 @@ class ContentImportForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state): void {
     $upload_file = $form_state->getValue('upload_fid');
 
     if (!$upload_file) {
@@ -115,19 +130,40 @@ class ContentImportForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
-    $fid = reset($form_state->getValue('upload_fid'));
-    $file_real_path = $this->contentSyncHelper->getFileRealPathById($fid);
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
+    $upload_fid = $form_state->getValue('upload_fid');
+    
+    if (!is_array($upload_fid) || empty($upload_fid)) {
+      $this->messenger()->addError($this->t('No file was uploaded.'));
+      return;
+    }
+    
+    $fid = reset($upload_fid);
+    
+    if (!is_int($fid) && !is_string($fid)) {
+      $this->messenger()->addError($this->t('Invalid file ID.'));
+      return;
+    }
+    
+    $file_real_path = $this->contentSyncHelper->getFileRealPathById((int) $fid);
     $file_info = pathinfo($file_real_path);
     $entity = NULL;
 
     try {
-      if ($file_info['extension'] === 'zip') {
+      if (isset($file_info['extension']) && $file_info['extension'] === 'zip') {
         $this->contentImporter->importFromZip($file_real_path);
       }
-      else {
+      elseif (isset($file_info['extension'])) {
         $entity = $this->contentImporter->importFromFile($file_real_path);
+      }
+      else {
+        throw new \Exception($this->t('Unable to determine file extension.')->render());
       }
     }
     catch (\Exception $e) {

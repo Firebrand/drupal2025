@@ -6,6 +6,7 @@ use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\schwab_content_sync\ContentExporterInterface;
@@ -71,7 +72,7 @@ class ContentExportForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container): self {
     return new static(
       $container->get('schwab_content_sync.exporter'),
       $container->get('entity_type.manager'),
@@ -89,8 +90,16 @@ class ContentExportForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return array<string, mixed>
+   *   The form structure.
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state): array {
     $form['deploy_message'] = [
       '#type' => 'markup',
       '#markup' => $this->t('By using the generated file you can import content on deploy'),
@@ -112,16 +121,37 @@ class ContentExportForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
     $parameters = $this->getRouteMatch()->getParameters();
     $entity = $this->contentSyncHelper->getDefaultLanguageEntity($parameters);
+    
+    if (!$entity instanceof FieldableEntityInterface) {
+      $this->messenger()->addError($this->t('Unable to export entity.'));
+      return;
+    }
+    
     $file_name = $this->contentSyncHelper->generateContentFileName($entity);
 
     // Stream a zip with assets.
     $response = new StreamedResponse(function () use ($entity) {
       $file = $this->fileGenerator->generateZipFile($entity, FALSE);
-      $fp = fopen($file->getFileUri(), 'rb');
+      $file_uri = $file->getFileUri();
+      
+      if (!is_string($file_uri)) {
+        return;
+      }
+      
+      $fp = fopen($file_uri, 'rb');
+      
+      if ($fp === false) {
+        return;
+      }
 
       while (!feof($fp)) {
         // Read a chunk of the file and send it to the client.
