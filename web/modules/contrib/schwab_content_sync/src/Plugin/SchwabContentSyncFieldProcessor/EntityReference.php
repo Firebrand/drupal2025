@@ -8,6 +8,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\schwab_content_sync\ContentExporter;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\ContentImporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncFieldProcessorPluginBase;
@@ -54,7 +55,7 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
   /**
    * Constructs new EntityReference plugin instance.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin_id for the plugin instance.
@@ -88,6 +89,8 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -103,17 +106,39 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
 
   /**
    * {@inheritdoc}
+   *
+   * @param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface> $field
+   *   The field item list.
+   *
+   * @return array<int, array<string, mixed>>
+   *   The exported field values.
    */
   public function exportFieldValue(FieldItemListInterface $field): array {
+    /** @var array<int, array<string, mixed>> $value */
     $value = [];
+    /** @var array<string, array<int>> $ids_by_entity_type */
     $ids_by_entity_type = [];
-    if ($this->getPluginDefinition()['field_type'] === 'entity_reference') {
+    
+    $plugin_definition = $this->getPluginDefinition();
+    $field_type = is_array($plugin_definition) && isset($plugin_definition['field_type']) 
+      ? $plugin_definition['field_type'] 
+      : NULL;
+    
+    if ($field_type === 'entity_reference') {
       $fieldDefinition = $field->getFieldDefinition();
-      $ids_by_entity_type[$fieldDefinition->getSetting('target_type')] = array_column($field->getValue(), 'target_id');
+      $field_values = $field->getValue();
+      if (is_array($field_values)) {
+        $ids_by_entity_type[$fieldDefinition->getSetting('target_type')] = array_column($field_values, 'target_id');
+      }
     }
     else {
-      foreach ($field->getValue() as $item) {
-        $ids_by_entity_type[$item['target_type']][] = $item['target_id'];
+      $field_values = $field->getValue();
+      if (is_array($field_values)) {
+        foreach ($field_values as $item) {
+          if (is_array($item) && isset($item['target_type']) && isset($item['target_id'])) {
+            $ids_by_entity_type[$item['target_type']][] = $item['target_id'];
+          }
+        }
       }
     }
 
@@ -122,8 +147,8 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
       $entities = $storage->loadMultiple($ids);
       foreach ($entities as $child_entity) {
         if ($child_entity instanceof FieldableEntityInterface) {
-          // Avoid exporting the same entity multiple times.
-          if (!$this->exporter->isReferenceCached($child_entity)) {
+          // Check if exporter is ContentExporter to use isReferenceCached method
+          if ($this->exporter instanceof ContentExporter && !$this->exporter->isReferenceCached($child_entity)) {
             // Export content entity relation.
             $value[] = $this->exporter->doExportToArray($child_entity);
           }
@@ -152,13 +177,21 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<int, array<string, mixed>> $value
+   *   The field values to import.
    */
   public function importFieldValue(FieldableEntityInterface $entity, string $fieldName, array $value): void {
+    /** @var array<int, mixed> $values */
     $values = [];
 
     foreach ($value as $childEntity) {
+      if (!is_array($childEntity)) {
+        continue;
+      }
+      
       // Import config relation just by setting target id.
-      if (isset($childEntity['type']) && $childEntity['type'] === 'config') {
+      if (isset($childEntity['type']) && $childEntity['type'] === 'config' && isset($childEntity['value'])) {
         $values[] = [
           'target_id' => $childEntity['value'],
         ];
@@ -171,16 +204,18 @@ class EntityReference extends SchwabContentSyncFieldProcessorPluginBase implemen
         continue;
       }
 
-      $referencedEntity = $this
-        ->entityRepository
-        ->loadEntityByUuid($childEntity['entity_type'], $childEntity['uuid']);
+      if (isset($childEntity['entity_type']) && isset($childEntity['uuid'])) {
+        $referencedEntity = $this
+          ->entityRepository
+          ->loadEntityByUuid($childEntity['entity_type'], $childEntity['uuid']);
 
-      // Create a stub entity without custom field values.
-      if (!$referencedEntity) {
-        $referencedEntity = $this->importer->createStubEntity($childEntity);
+        // Create a stub entity without custom field values.
+        if (!$referencedEntity) {
+          $referencedEntity = $this->importer->createStubEntity($childEntity);
+        }
+
+        $values[] = $referencedEntity;
       }
-
-      $values[] = $referencedEntity;
     }
 
     $entity->set($fieldName, $values);

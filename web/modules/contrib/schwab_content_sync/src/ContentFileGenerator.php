@@ -44,7 +44,7 @@ class ContentFileGenerator implements ContentFileGeneratorInterface {
   /**
    * ContentFileGenerator constructor.
    *
-   * @param \Drupal\Core\file\FileSystemInterface $file_system
+   * @param \Drupal\Core\File\FileSystemInterface $file_system
    *   The file system.
    * @param \Drupal\schwab_content_sync\ContentSyncHelperInterface $content_sync_helper
    *   The content sync helper.
@@ -79,12 +79,28 @@ class ContentFileGenerator implements ContentFileGeneratorInterface {
   public function generateZipFile(FieldableEntityInterface $entity, bool $extract_translations = FALSE): FileInterface {
     $file_name = $this->contentSyncHelper->generateContentFileName($entity);
     $zip_file = $this->generateEmptyZipFile($file_name);
-    $zip_file_path = $this->fileSystem->realpath($zip_file->getFileUri());
+    
+    $file_uri = $zip_file->getFileUri();
+    if (!is_string($file_uri)) {
+      return $zip_file;
+    }
+    
+    $zip_file_path = $this->fileSystem->realpath($file_uri);
+    if ($zip_file_path === FALSE) {
+      return $zip_file;
+    }
+    
     $zip = $this->contentSyncHelper->createZipInstance($zip_file_path, \ZipArchive::OVERWRITE);
 
     // Add exported content to the zip file.
     $entity_export = $this->contentExporter->doExportToYml($entity, $extract_translations);
-    $zip->getArchive()->addFromString("{$file_name}.yml", $entity_export);
+    
+    // Check if the zip has a getArchive method (it should be a ZipArchive wrapper)
+    if (method_exists($zip, 'getArchive')) {
+      /** @var \ZipArchive $archive */
+      $archive = $zip->getArchive();
+      $archive->addFromString("{$file_name}.yml", $entity_export);
+    }
 
     // Add assets such images and files to the zip file.
     $this->addAssetsToZip($zip);
@@ -94,13 +110,24 @@ class ContentFileGenerator implements ContentFileGeneratorInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<int, \Drupal\Core\Entity\FieldableEntityInterface> $entities
    */
   public function generateBulkZipFile(array $entities, bool $extract_translations = FALSE, bool $extract_assets = FALSE): FileInterface {
     // Generate an empty zip file to be used for storing the exported content.
     $zip_name = sprintf('content-bulk-export-%s', date('d_m_Y-H_i'));
     $zip_file = $this->generateEmptyZipFile($zip_name);
 
-    $zip_file_path = $this->fileSystem->realpath($zip_file->getFileUri());
+    $file_uri = $zip_file->getFileUri();
+    if (!is_string($file_uri)) {
+      return $zip_file;
+    }
+    
+    $zip_file_path = $this->fileSystem->realpath($file_uri);
+    if ($zip_file_path === FALSE) {
+      return $zip_file;
+    }
+    
     $zip = $this->contentSyncHelper->createZipInstance($zip_file_path, \ZipArchive::OVERWRITE);
 
     // Clean up storage with assets before we start exporting a content.
@@ -111,7 +138,13 @@ class ContentFileGenerator implements ContentFileGeneratorInterface {
       // Generate the yml files and add to the zip.
       $entity_export = $this->contentExporter->doExportToYml($entity, $extract_translations);
       $file_name = $this->contentSyncHelper->generateContentFileName($entity);
-      $zip->getArchive()->addFromString("{$file_name}.yml", $entity_export);
+      
+      // Check if the zip has a getArchive method
+      if (method_exists($zip, 'getArchive')) {
+        /** @var \ZipArchive $archive */
+        $archive = $zip->getArchive();
+        $archive->addFromString("{$file_name}.yml", $entity_export);
+      }
     }
 
     if ($extract_assets) {
@@ -145,20 +178,40 @@ class ContentFileGenerator implements ContentFileGeneratorInterface {
    *   The zip file to which the assets will be added.
    */
   protected function addAssetsToZip(ArchiverInterface $zip): void {
-    $assets = $this->privateTempStore->get('export.assets') ?? [];
+    $assets = $this->privateTempStore->get('export.assets');
+    
+    if (!is_array($assets)) {
+      return;
+    }
 
     foreach ($assets as $file_uri) {
+      if (!is_string($file_uri)) {
+        continue;
+      }
+      
       // Add file to the zip.
       $file_full_path = $this->fileSystem->realpath($file_uri);
-      [$scheme, $file_relative_path] = explode('://', $file_uri);
-
-      // Don't add external files as it can be imported by absolute url.
-      if ($file_full_path) {
-        $zip->getArchive()->addFile($file_full_path, "assets/{$scheme}/{$file_relative_path}");
+      $uri_parts = explode('://', $file_uri, 2);
+      
+      if (count($uri_parts) !== 2) {
+        continue;
       }
-      elseif ($data = file_get_contents($file_uri)) {
-        // Add file contents to the ZIP archive with the same relative path.
-        $zip->getArchive()->addFromString("assets/{$scheme}/{$file_relative_path}", $data);
+      
+      [$scheme, $file_relative_path] = $uri_parts;
+
+      // Check if the zip has a getArchive method
+      if (method_exists($zip, 'getArchive')) {
+        /** @var \ZipArchive $archive */
+        $archive = $zip->getArchive();
+        
+        // Don't add external files as it can be imported by absolute url.
+        if ($file_full_path !== FALSE) {
+          $archive->addFile($file_full_path, "assets/{$scheme}/{$file_relative_path}");
+        }
+        elseif ($data = file_get_contents($file_uri)) {
+          // Add file contents to the ZIP archive with the same relative path.
+          $archive->addFromString("assets/{$scheme}/{$file_relative_path}", $data);
+        }
       }
     }
 
