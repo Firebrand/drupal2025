@@ -9,6 +9,8 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\menu_link_content\MenuLinkContentInterface;
+use Drupal\node\NodeInterface;
+use Drupal\schwab_content_sync\ContentExporter;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncBaseFieldsProcessorPluginBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -57,7 +59,7 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
   /**
    * A new instance of Node base fields processor plugin.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin_id for the plugin instance.
@@ -83,6 +85,8 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -98,10 +102,17 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function exportBaseValues(FieldableEntityInterface $entity): array {
+    if (!$entity instanceof NodeInterface) {
+      return [];
+    }
+
     $owner = $entity->getOwner();
 
+    /** @var array<string, mixed> $base_fields */
     $base_fields = [
       'title' => $entity->getTitle(),
       'status' => $entity->isPublished(),
@@ -118,11 +129,15 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
       // Export content menu link item if available.
       if (!empty($menu_link['entity_id']) && ($menu_link_entity = $storage->load($menu_link['entity_id']))) {
-        assert($menu_link_entity instanceof MenuLinkContentInterface);
-
-        // Avoid infinitive loop, export menu link only once.
-        if (!$this->exporter->isReferenceCached($menu_link_entity)) {
-          $base_fields['menu_link'] = $this->exporter->doExportToArray($menu_link_entity);
+        if ($menu_link_entity instanceof MenuLinkContentInterface) {
+          // Check if exporter is ContentExporter to use isReferenceCached method
+          if ($this->exporter instanceof ContentExporter && !$this->exporter->isReferenceCached($menu_link_entity)) {
+            $base_fields['menu_link'] = $this->exporter->doExportToArray($menu_link_entity);
+          }
+          elseif (!($this->exporter instanceof ContentExporter)) {
+            // Fallback if not ContentExporter instance
+            $base_fields['menu_link'] = $this->exporter->doExportToArray($menu_link_entity);
+          }
         }
       }
     }
@@ -132,8 +147,12 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $values
+   * @return array<string, mixed>
    */
   public function mapBaseFieldsValues(array $values, FieldableEntityInterface $entity): array {
+    /** @var array<string, mixed> $baseFields */
     $baseFields = [
       'title' => $values['title'],
       'langcode' => $values['langcode'],
@@ -157,7 +176,7 @@ class Node extends SchwabContentSyncBaseFieldsProcessorPluginBase implements Con
         '@author' => $account_provided ? $values['author'] : $this->t('Unknown'),
       ]);
 
-      if (!empty($values['revision_log_message'])) {
+      if (!empty($values['revision_log_message']) && $entity instanceof NodeInterface) {
         $entity->setRevisionLogMessage($values['revision_log_message'] . $log_extra);
       }
 

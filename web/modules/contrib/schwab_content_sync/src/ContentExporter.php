@@ -11,6 +11,7 @@ use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Serialization\Yaml;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
+use Drupal\Core\TypedData\TranslatableInterface;
 use Drupal\field\FieldConfigInterface;
 use Drupal\schwab_content_sync\Event\ExportEvent;
 use Drupal\schwab_content_sync\Event\ExportFieldEvent;
@@ -54,14 +55,14 @@ class ContentExporter implements ContentExporterInterface {
   /**
    * Local cache variable to store the reference info of entities.
    *
-   * @var array
+   * @var array<string, string>
    */
   private array $entityReferenceCache = [];
 
   /**
    * Local cache variable to store the exported output of entities.
    *
-   * @var array
+   * @var array<string, array<string, mixed>>
    */
   private array $entityOutputCache = [];
 
@@ -203,7 +204,7 @@ class ContentExporter implements ContentExporterInterface {
    *
    * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
    *   The entity to be added to the entityOuputCache.
-   * @param array $output
+   * @param array<string, mixed> $output
    *   The exported content output.
    */
   protected function addEntityToOutputCache(FieldableEntityInterface $entity, array $output): void {
@@ -224,6 +225,8 @@ class ContentExporter implements ContentExporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function doExportToArray(FieldableEntityInterface $entity): array {
     // Add the entity to the entityReferenceCache array.
@@ -235,6 +238,7 @@ class ContentExporter implements ContentExporterInterface {
       return $this->entityOutputCache[$this->generateCacheKey($entity)];
     }
 
+    /** @var array<string, mixed> $output */
     $output = [
       'uuid' => $entity->uuid(),
       'entity_type' => $entity->getEntityTypeId(),
@@ -264,7 +268,7 @@ class ContentExporter implements ContentExporterInterface {
     }
 
     // Extract translations.
-    if ($this->extractTranslationsMode && $entity->isTranslatable()) {
+    if ($this->extractTranslationsMode && $entity instanceof TranslatableInterface && $entity->isTranslatable()) {
       $translations = $entity->getTranslationLanguages();
 
       if (count($translations)) {
@@ -308,6 +312,8 @@ class ContentExporter implements ContentExporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function exportBaseValues(FieldableEntityInterface $entity): array {
     $entityProcessor = $this->entityBaseFieldsProcessorPluginManager
@@ -322,7 +328,10 @@ class ContentExporter implements ContentExporterInterface {
 
     // Support path field for multiple entity types.
     if ($entity->hasField('path')) {
-      $base_fields['url'] = $entity->get('path')->alias;
+      $pathField = $entity->get('path');
+      if ($pathField->count() > 0 && isset($pathField->first()->alias)) {
+        $base_fields['url'] = $pathField->first()->alias;
+      }
     }
 
     return $base_fields;
@@ -330,9 +339,12 @@ class ContentExporter implements ContentExporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function exportCustomValues(FieldableEntityInterface $entity, bool $check_translated_fields_only = FALSE): array {
     $fields = $check_translated_fields_only ? $entity->getTranslatableFields() : $entity->getFields();
+    /** @var array<string, mixed> $values */
     $values = [];
 
     foreach ($fields as $field) {
@@ -346,14 +358,24 @@ class ContentExporter implements ContentExporterInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface> $field
+   *   The field item list.
+   *
+   * @return array<int|string, mixed>|bool|string|null
    */
   public function getFieldValue(FieldItemListInterface $field) {
+    $fieldName = $field->getName();
+    if (!is_string($fieldName)) {
+      return NULL;
+    }
+
     $fieldProcessor = $this
       ->fieldProcessorPluginManager
       ->getFieldPluginInstance(
         $field->getEntity()->getEntityTypeId(),
         $field->getEntity()->bundle(),
-        $field->getName()
+        $fieldName
       );
 
     // If field type is not supported, it will simply get the value as it is.

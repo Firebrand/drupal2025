@@ -3,7 +3,9 @@
 namespace Drupal\schwab_content_sync\Plugin\Action;
 
 use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Action\ConfigurableActionBase;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Session\AccountInterface;
@@ -47,7 +49,7 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
   /**
    * Constructs a ContentBulkExport object.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin ID for the plugin instance.
@@ -67,6 +69,8 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -80,21 +84,37 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @param mixed $object
+   *   The object to execute the action on.
    */
-  public function execute($object = NULL) {
+  public function execute($object = NULL): void {
     // Moved the logic to ::executeMultiple();
   }
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<int, \Drupal\Core\Entity\EntityInterface> $entities
+   *   An array of entities.
    */
-  public function executeMultiple(array $entities) {
+  public function executeMultiple(array $entities): void {
     $extract_translations = $this->configuration['translation'];
     $extract_assets = $this->configuration['assets'];
     $file = $this->fileGenerator->generateBulkZipFile($entities, $extract_translations, $extract_assets);
 
     $response = new StreamedResponse(static function () use ($file) {
-      $fp = fopen($file->getFileUri(), 'rb');
+      $file_uri = $file->getFileUri();
+      
+      if (!is_string($file_uri)) {
+        return;
+      }
+      
+      $fp = fopen($file_uri, 'rb');
+      
+      if ($fp === false) {
+        return;
+      }
 
       while (!feof($fp)) {
         // Read a chunk of the file and send it to the client.
@@ -119,11 +139,25 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @param mixed $object
+   *   The object to check access for.
+   * @param \Drupal\Core\Session\AccountInterface|null $account
+   *   The user account.
+   * @param bool $return_as_object
+   *   Whether to return an AccessResultInterface object.
+   *
+   * @return \Drupal\Core\Access\AccessResultInterface|bool
+   *   The access result.
    */
   public function access($object, ?AccountInterface $account = NULL, $return_as_object = FALSE) {
+    if ($account === NULL) {
+      $account = \Drupal::currentUser();
+    }
+    
     $result = AccessResult::allowedIfHasPermission($account, 'export single content');
 
-    if (!$this->contentSyncHelper->access($object)) {
+    if ($object instanceof EntityInterface && !$this->contentSyncHelper->access($object)) {
       $result = AccessResult::forbidden()->addCacheTags(['config:schwab_content_sync.settings']);
     }
 
@@ -132,8 +166,11 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, bool>
+   *   The default configuration.
    */
-  public function defaultConfiguration() {
+  public function defaultConfiguration(): array {
     return [
       'assets' => TRUE,
       'translation' => TRUE,
@@ -142,8 +179,16 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return array<string, mixed>
+   *   The form structure.
    */
-  public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
+  public function buildConfigurationForm(array $form, FormStateInterface $form_state): array {
     $form['assets'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Include all assets'),
@@ -163,8 +208,13 @@ class ContentBulkExport extends ConfigurableActionBase implements ContainerFacto
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $form
+   *   An associative array containing the structure of the form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
-  public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
+  public function submitConfigurationForm(array &$form, FormStateInterface $form_state): void {
     $this->configuration['assets'] = $form_state->getValue('assets');
     $this->configuration['translation'] = $form_state->getValue('translation');
   }

@@ -8,6 +8,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\schwab_content_sync\ContentExporter;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\ContentImporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncFieldProcessorPluginBase;
@@ -55,7 +56,7 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
   /**
    * Constructs new Link plugin instance.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin_id for the plugin instance.
@@ -89,6 +90,8 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -104,11 +107,23 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
 
   /**
    * {@inheritdoc}
+   *
+   * @param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface> $field
+   *   The field item list.
+   *
+   * @return array<int, array<string, mixed>>
+   *   The exported field values.
    */
   public function exportFieldValue(FieldItemListInterface $field): array {
+    /** @var array<int, array<string, mixed>> $values */
     $values = $field->getValue();
+    
+    if (!is_array($values)) {
+      return [];
+    }
+    
     foreach ($values as $delta => $value) {
-      if (empty($value['uri'])) {
+      if (!is_array($value) || empty($value['uri']) || !is_string($value['uri'])) {
         continue;
       }
 
@@ -119,18 +134,30 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
         $entity = $this->entityTypeManager->getStorage($entity_type_id)
           ->load($entity_id);
 
-        if (!$entity) {
+        if (!$entity instanceof EntityInterface) {
           continue;
         }
 
-        if (!$this->exporter->isReferenceCached($entity)) {
-          $values[$delta]['linked_entity'] = $this->exporter->doExportToArray($entity);
+        // Check if entity is FieldableEntityInterface for export operations
+        if ($entity instanceof FieldableEntityInterface) {
+          // Check if exporter is ContentExporter to use isReferenceCached method
+          if ($this->exporter instanceof ContentExporter && !$this->exporter->isReferenceCached($entity)) {
+            $values[$delta]['linked_entity'] = $this->exporter->doExportToArray($entity);
+          }
+          else {
+            $values[$delta]['linked_entity'] = [
+              'uuid' => $entity->uuid(),
+              'entity_type' => $entity->getEntityTypeId(),
+              'base_fields' => $this->exporter->exportBaseValues($entity),
+              'bundle' => $entity->bundle(),
+            ];
+          }
         }
         else {
+          // For non-fieldable entities, just store basic info
           $values[$delta]['linked_entity'] = [
             'uuid' => $entity->uuid(),
             'entity_type' => $entity->getEntityTypeId(),
-            'base_fields' => $this->exporter->exportBaseValues($entity),
             'bundle' => $entity->bundle(),
           ];
         }
@@ -142,10 +169,13 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<int, array<string, mixed>> $value
+   *   The field values.
    */
   public function importFieldValue(FieldableEntityInterface $entity, string $fieldName, array $value): void {
     foreach ($value as $delta => $item) {
-      if (!isset($item['linked_entity'])) {
+      if (!is_array($item) || !isset($item['linked_entity']) || !is_array($item['linked_entity'])) {
         continue;
       }
 
@@ -156,17 +186,22 @@ class Link extends SchwabContentSyncFieldProcessorPluginBase implements Containe
         $referenced_entity = $this->importer->doImport($linked_entity);
       }
       else {
-        $referenced_entity = $this
-          ->entityRepository
-          ->loadEntityByUuid($linked_entity['entity_type'], $linked_entity['uuid']);
+        if (isset($linked_entity['entity_type']) && isset($linked_entity['uuid'])) {
+          $referenced_entity = $this
+            ->entityRepository
+            ->loadEntityByUuid($linked_entity['entity_type'], $linked_entity['uuid']);
 
-        // Create a stub entity without custom field values.
-        if (!$referenced_entity) {
-          $referenced_entity = $this->importer->createStubEntity($linked_entity);
+          // Create a stub entity without custom field values.
+          if (!$referenced_entity) {
+            $referenced_entity = $this->importer->createStubEntity($linked_entity);
+          }
+        }
+        else {
+          continue;
         }
       }
 
-      if ($referenced_entity instanceof EntityInterface) {
+      if ($referenced_entity instanceof EntityInterface && isset($item['uri']) && is_string($item['uri'])) {
         $value[$delta]['uri'] = preg_replace_callback('/^entity:.+\/(\d+)$/', function () use ($referenced_entity) {
           return "entity:{$referenced_entity->getEntityTypeId()}/{$referenced_entity->id()}";
         }, $item['uri']);
