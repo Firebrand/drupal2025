@@ -178,6 +178,10 @@ class ContentImporter implements ContentImporterInterface {
 
       $entity = $storage->create($values);
     }
+    
+    if (!$entity instanceof EntityInterface) {
+      throw new \RuntimeException('Failed to create or load entity.');
+    }
 
     switch ($content['entity_type']) {
       case 'node':
@@ -197,7 +201,9 @@ class ContentImporter implements ContentImporterInterface {
 
       case 'taxonomy_term':
         if (isset($content['base_fields']['parent']) && is_array($content['base_fields']['parent']) && $entity instanceof ContentEntityInterface) {
-          $entity->set('parent', $this->doImport($content['base_fields']['parent']));
+          /** @var array<string, mixed> $parent */
+          $parent = $content['base_fields']['parent'];
+          $entity->set('parent', $this->doImport($parent));
         }
         break;
 
@@ -218,7 +224,9 @@ class ContentImporter implements ContentImporterInterface {
 
     // Import values from base fields.
     if ($entity instanceof FieldableEntityInterface && isset($content['base_fields']) && is_array($content['base_fields'])) {
-      $this->importBaseValues($entity, $content['base_fields']);
+      /** @var array<string, mixed> $base_fields */
+      $base_fields = $content['base_fields'];
+      $this->importBaseValues($entity, $base_fields);
     }
 
     // Alter importing entity by using hook_content_import_entity_alter().
@@ -231,22 +239,33 @@ class ContentImporter implements ContentImporterInterface {
 
     // Import values from custom fields.
     if ($entity instanceof FieldableEntityInterface && isset($content['custom_fields']) && is_array($content['custom_fields'])) {
-      $this->importCustomValues($entity, $content['custom_fields']);
+      /** @var array<string, mixed> $custom_fields */
+      $custom_fields = $content['custom_fields'];
+      $this->importCustomValues($entity, $custom_fields);
     }
     
-    $this->createOrUpdate($entity);
+    if ($entity instanceof EntityInterface) {
+      $this->createOrUpdate($entity);
+    }
 
     // Import menu link when entity is created.
     if (isset($content['base_fields']['menu_link']) && is_array($content['base_fields']['menu_link'])) {
-      $this->doImport($content['base_fields']['menu_link']);
+      /** @var array<string, mixed> $menu_link */
+      $menu_link = $content['base_fields']['menu_link'];
+      $this->doImport($menu_link);
     }
 
     // Sync translations of the entity.
     if (isset($content['translations']) && is_array($content['translations']) && $entity instanceof TranslatableInterface) {
-      /** @var array<string, array<string, mixed>> $translations */
-      $translations = $content['translations'];
-      foreach ($translations as $langcode => $translation_content) {
-        if (!is_string($langcode) || !is_array($translation_content)) {
+      foreach ($content['translations'] as $langcode => $translation_content) {
+        // Skip if langcode is not string or translation_content is not array
+        // We don't use the type-narrowed variables to avoid PHPStan warnings
+        if (!is_string($langcode)) {
+          continue;
+        }
+        
+        // Additional check to ensure translation_content is actually an array
+        if (!is_array($translation_content)) {
           continue;
         }
         
