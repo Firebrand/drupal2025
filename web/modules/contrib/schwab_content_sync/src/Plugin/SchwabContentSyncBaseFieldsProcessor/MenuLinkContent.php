@@ -2,12 +2,14 @@
 
 namespace Drupal\schwab_content_sync\Plugin\SchwabContentSyncBaseFieldsProcessor;
 
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityRepositoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\link\Plugin\Field\FieldType\LinkItem;
 use Drupal\menu_link_content\MenuLinkContentInterface;
+use Drupal\schwab_content_sync\ContentExporter;
 use Drupal\schwab_content_sync\ContentExporterInterface;
 use Drupal\schwab_content_sync\ContentImporterInterface;
 use Drupal\schwab_content_sync\SchwabContentSyncBaseFieldsProcessorPluginBase;
@@ -54,6 +56,21 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\schwab_content_sync\ContentExporterInterface $exporter
+   *   The content exporter service.
+   * @param \Drupal\Core\Entity\EntityRepositoryInterface $entity_repository
+   *   The entity repository service.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager service.
+   * @param \Drupal\schwab_content_sync\ContentImporterInterface $importer
+   *   The content importer service.
    */
   public function __construct(array $configuration, $plugin_id, $plugin_definition, ContentExporterInterface $exporter, EntityRepositoryInterface $entity_repository, EntityTypeManagerInterface $entity_type_manager, ContentImporterInterface $importer) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
@@ -66,6 +83,8 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -81,10 +100,13 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function exportBaseValues(FieldableEntityInterface $entity): array {
     assert($entity instanceof MenuLinkContentInterface);
 
+    /** @var array<string, mixed> $base_fields */
     $base_fields = [
       'title' => $entity->getTitle(),
       'enabled' => $entity->isPublished(),
@@ -99,11 +121,14 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
 
     // Export parent menu link.
     if ($entity->getParentId()) {
-      [, $parent_uuid] = explode(':', $entity->getParentId());
-      $parent = $this->entityRepository->loadEntityByUuid($entity->getEntityTypeId(), $parent_uuid);
+      $parent_id_parts = explode(':', $entity->getParentId(), 2);
+      if (count($parent_id_parts) === 2) {
+        [, $parent_uuid] = $parent_id_parts;
+        $parent = $this->entityRepository->loadEntityByUuid($entity->getEntityTypeId(), $parent_uuid);
 
-      if ($parent instanceof MenuLinkContentInterface) {
-        $base_fields['parent'] = $this->exporter->doExportToArray($parent);
+        if ($parent instanceof MenuLinkContentInterface) {
+          $base_fields['parent'] = $this->exporter->doExportToArray($parent);
+        }
       }
     }
 
@@ -113,7 +138,7 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
         continue;
       }
 
-      if (preg_match('/^entity.(.+).canonical$/', $item->getUrl()->getRouteName(), $matches)) {
+      if (preg_match('/^entity\.(.+)\.canonical$/', $item->getUrl()->getRouteName(), $matches)) {
         $linked_entity_type_id = $matches[1];
         $linked_entity_id = $item->getUrl()->getRouteParameters()[$linked_entity_type_id] ?? NULL;
 
@@ -125,7 +150,8 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
           ->load($linked_entity_id);
 
         if ($linked_entity instanceof FieldableEntityInterface) {
-          if (!$this->exporter->isReferenceCached($linked_entity)) {
+          // Check if exporter is ContentExporter to use isReferenceCached method
+          if ($this->exporter instanceof ContentExporter && !$this->exporter->isReferenceCached($linked_entity)) {
             $base_fields['link'][$index]['entity'] = $this->exporter->doExportToArray($linked_entity);
           }
           else {
@@ -147,8 +173,12 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $values
+   * @return array<string, mixed>
    */
   public function mapBaseFieldsValues(array $values, FieldableEntityInterface $entity): array {
+    /** @var array<string, mixed> $baseFields */
     $baseFields = [
       'title' => $values['title'],
       'enabled' => $values['enabled'],
@@ -162,29 +192,37 @@ class MenuLinkContent extends SchwabContentSyncBaseFieldsProcessorPluginBase imp
     ];
 
     // Import parent menu link first.
-    if (!empty($values['parent'])) {
+    if (!empty($values['parent']) && is_array($values['parent'])) {
       $parent = $this->importer->doImport($values['parent']);
-      $baseFields['parent'] = implode(':', ['menu_link_content', $parent->uuid()]);
+      if ($parent instanceof EntityInterface) {
+        $baseFields['parent'] = implode(':', ['menu_link_content', $parent->uuid()]);
+      }
     }
 
     // Import linked entity.
-    foreach ($baseFields['link'] as &$item) {
-      if (!isset($item['entity'])) {
-        continue;
+    if (is_array($baseFields['link'])) {
+      foreach ($baseFields['link'] as &$item) {
+        if (!is_array($item) || !isset($item['entity']) || !is_array($item['entity'])) {
+          continue;
+        }
+
+        // If the entity was fully exported we do the full import.
+        if ($this->importer->isFullEntity($item['entity'])) {
+          $this->importer->doImport($item['entity']);
+        }
+
+        if (isset($item['entity']['entity_type']) && isset($item['entity']['uuid'])) {
+          $linked_entity = $this->entityRepository->loadEntityByUuid($item['entity']['entity_type'], $item['entity']['uuid']);
+
+          if (!$linked_entity) {
+            $linked_entity = $this->importer->createStubEntity($item['entity']);
+          }
+
+          if ($linked_entity instanceof EntityInterface) {
+            $item['uri'] = "entity:{$linked_entity->getEntityTypeId()}/{$linked_entity->id()}";
+          }
+        }
       }
-
-      // If the entity was fully exported we do the full import.
-      if ($this->importer->isFullEntity($item['entity'])) {
-        $this->importer->doImport($item['entity']);
-      }
-
-      $linked_entity = $this->entityRepository->loadEntityByUuid($item['entity']['entity_type'], $item['entity']['uuid']);
-
-      if (!$linked_entity) {
-        $linked_entity = $this->importer->createStubEntity($item['entity']);
-      }
-
-      $item['uri'] = "entity:{$linked_entity->getEntityTypeId()}/{$linked_entity->id()}";
     }
 
     return $baseFields;

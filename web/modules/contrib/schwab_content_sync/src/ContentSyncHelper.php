@@ -143,10 +143,16 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
    * {@inheritdoc}
    */
   public function createZipInstance(string $file_real_path, int $flags = 0): ArchiverInterface {
-    return $this->archiverManager->getInstance([
+    $instance = $this->archiverManager->getInstance([
       'filepath' => $file_real_path,
       'flags' => $flags,
     ]);
+    
+    if (!$instance instanceof ArchiverInterface) {
+      throw new \RuntimeException('Failed to create archiver instance.');
+    }
+    
+    return $instance;
   }
 
   /**
@@ -162,40 +168,53 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>
    */
   public function validateYamlFileContent(string $content): array {
-    $content = Yaml::decode($content);
+    $decoded = Yaml::decode($content);
     // Validate YAML format structure.
-    if (!is_array($content)) {
+    if (!is_array($decoded)) {
       throw new \Exception('YAML is not valid.');
     }
 
+    /** @var array<string, mixed> $decoded */
+
     // Validate required YAML properties.
-    if (!isset($content['uuid']) || !isset($content['entity_type']) || !isset($content['bundle']) || !isset($content['base_fields']) || !isset($content['custom_fields'])) {
+    if (!isset($decoded['uuid']) || !isset($decoded['entity_type']) || !isset($decoded['bundle']) || !isset($decoded['base_fields']) || !isset($decoded['custom_fields'])) {
       throw new \Exception('The content of the YAML file is not valid. Make sure there are uuid, entity_type, base_fields, and custom_fields properties.');
     }
 
     // Validate Site UUID value to prevent import on different site.
     if ($this->siteUuidCheckEnabled()
-      && !empty($content['site_uuid'])
-      && $this->getSiteUuid() !== $content['site_uuid']) {
+      && !empty($decoded['site_uuid'])
+      && $this->getSiteUuid() !== $decoded['site_uuid']) {
       throw new \Exception('Content source site has another UUID than current one (destination). Make sure that content has been exported from the same instance of the site or disable Site UUID check.');
     }
 
     // Validate that entity type and bundle exists.
-    $definition = $this->entityTypeManager->getDefinition($content['entity_type']);
-    if (!$definition) {
-      throw new \Exception(sprintf('The content of the YAML file is not valid. Make sure that entity type "%s" of the imported content does exist on your site.', $content['entity_type']));
+    if (!is_string($decoded['entity_type'])) {
+      throw new \Exception('Entity type must be a string.');
     }
-    else {
-      // Validate that bundle exists.
-      $available_bundles = $this->entityTypeBundleInfo->getBundleInfo($content['entity_type']);
-      if (empty($available_bundles[$content['bundle']])) {
-        throw new \Exception(sprintf('The content of the YAML file is not valid. Make sure that bundle "%s" of the imported content with entity type "%s" does exist on your site.', $content['bundle'], $content['entity_type']));
-      }
+    
+    if (!is_string($decoded['bundle'])) {
+      throw new \Exception('Bundle must be a string.');
+    }
+    
+    try {
+      $definition = $this->entityTypeManager->getDefinition($decoded['entity_type']);
+    }
+    catch (\Exception $e) {
+      throw new \Exception(sprintf('The content of the YAML file is not valid. Make sure that entity type "%s" of the imported content does exist on your site.', $decoded['entity_type']));
     }
 
-    return $content;
+    // Validate that bundle exists.
+    $available_bundles = $this->entityTypeBundleInfo->getBundleInfo($decoded['entity_type']);
+    if (empty($available_bundles[$decoded['bundle']])) {
+      throw new \Exception(sprintf('The content of the YAML file is not valid. Make sure that bundle "%s" of the imported content with entity type "%s" does exist on your site.', $decoded['bundle'], $decoded['entity_type']));
+    }
+
+    return $decoded;
   }
 
   /**
@@ -204,24 +223,49 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
   public function getFileRealPathById(int $fid): string {
     $storage = $this->entityTypeManager->getStorage('file');
 
-    /** @var \Drupal\file\FileInterface $file */
+    /** @var \Drupal\file\FileInterface|null $file */
     $file = $storage->load($fid);
 
-    if (!$file) {
+    if (!$file instanceof FileInterface) {
       throw new \Exception('The requested file could not be found.');
     }
 
-    return $this->fileSystem->realpath($file->getFileUri());
+    $file_uri = $file->getFileUri();
+    if (!is_string($file_uri)) {
+      throw new \Exception('File URI is not valid.');
+    }
+
+    $real_path = $this->fileSystem->realpath($file_uri);
+    if ($real_path === FALSE) {
+      throw new \Exception('Could not determine real path for file.');
+    }
+
+    return $real_path;
   }
 
   /**
    * {@inheritdoc}
    */
   public function getDefaultLanguageEntity(ParameterBag $parameters): EntityInterface {
-    $entity_uuid = $parameters->getIterator()->current()->uuid();
-    $entity_type_id = $parameters->getIterator()->current()->getEntityTypeId();
-    /** @var \Drupal\Core\Entity\EntityInterface $entity */
+    $iterator = $parameters->getIterator();
+    $current = $iterator->current();
+    
+    if (!$current instanceof EntityInterface) {
+      throw new \InvalidArgumentException('No valid entity found in parameters.');
+    }
+    
+    $entity_uuid = $current->uuid();
+    if (!is_string($entity_uuid)) {
+      throw new \RuntimeException('Entity UUID is not valid.');
+    }
+    
+    $entity_type_id = $current->getEntityTypeId();
+    
     $entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $entity_uuid);
+    
+    if (!$entity instanceof EntityInterface) {
+      throw new \RuntimeException('Entity could not be loaded.');
+    }
 
     return $entity;
   }
@@ -231,10 +275,16 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
    */
   public function access(EntityInterface $entity): bool {
     $allowed_entity_types = $this->configFactory->get('schwab_content_sync.settings')->get('allowed_entity_types');
+    
+    if (!is_array($allowed_entity_types)) {
+      return FALSE;
+    }
+    
     $entity_type_id = $entity->getEntityTypeId();
 
     return array_key_exists($entity_type_id, $allowed_entity_types) &&
-      ($allowed_entity_types[$entity_type_id] === [] || in_array($entity->bundle(), $allowed_entity_types[$entity_type_id], TRUE)) &&
+      (is_array($allowed_entity_types[$entity_type_id]) && 
+       ($allowed_entity_types[$entity_type_id] === [] || in_array($entity->bundle(), $allowed_entity_types[$entity_type_id], TRUE))) &&
       $entity->getEntityType()->hasLinkTemplate('single-content:export') &&
       $entity->access('single-content:export');
   }
@@ -250,7 +300,13 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
    * {@inheritdoc}
    */
   public function getSiteUuid(): string {
-    return $this->configFactory->get('system.site')->get('uuid');
+    $uuid = $this->configFactory->get('system.site')->get('uuid');
+    
+    if (!is_string($uuid)) {
+      throw new \RuntimeException('Site UUID is not configured.');
+    }
+    
+    return $uuid;
   }
 
   /**
@@ -258,7 +314,13 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
    */
   public function getExportDirectorySchema(): string {
     $settings = $this->configFactory->get('schwab_content_sync.settings');
-    return $settings->get('export_directory_schema') ?? 'temporary';
+    $schema = $settings->get('export_directory_schema');
+    
+    if (!is_string($schema) || empty($schema)) {
+      return 'temporary';
+    }
+    
+    return $schema;
   }
 
   /**
@@ -266,7 +328,13 @@ class ContentSyncHelper implements ContentSyncHelperInterface {
    */
   public function getImportDirectorySchema(): string {
     $settings = $this->configFactory->get('schwab_content_sync.settings');
-    return $settings->get('import_directory_schema') ?? 'temporary';
+    $schema = $settings->get('import_directory_schema');
+    
+    if (!is_string($schema) || empty($schema)) {
+      return 'temporary';
+    }
+    
+    return $schema;
   }
 
 }
