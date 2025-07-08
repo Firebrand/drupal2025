@@ -56,7 +56,7 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
   /**
    * Constructs new EntityReference plugin instance.
    *
-   * @param array $configuration
+   * @param array<string, mixed> $configuration
    *   A configuration array containing information about the plugin instance.
    * @param string $plugin_id
    *   The plugin_id for the plugin instance.
@@ -90,6 +90,8 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   *
+   * @param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
     return new static(
@@ -105,61 +107,80 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   * 
+   * @param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface> $field
+   *   The field item list.
+   *
+   * @return array<int, array<string, mixed>>
+   *   The exported field values.
    */
   public function exportFieldValue(FieldItemListInterface $field): array {
+    /** @var array<int, array<string, mixed>> $value */
     $value = $field->getValue();
 
     foreach ($value as &$item) {
+      if (!isset($item['value']) || !is_string($item['value'])) {
+        continue;
+      }
+      
       $text = $item['value'];
 
       $dom = Html::load($text);
       $xpath = new \DOMXPath($dom);
+      /** @var array<int, array<string, mixed>> $embed_entities */
       $embed_entities = [];
 
-      foreach ($xpath->query('//drupal-media[@data-entity-type="media" and normalize-space(@data-entity-uuid)!=""]') as $node) {
-        /** @var \DOMElement $node */
-        $uuid = $node->getAttribute('data-entity-uuid');
-        $media = $this->entityRepository->loadEntityByUuid('media', $uuid);
-        assert($media === NULL || $media instanceof MediaInterface);
+      $mediaNodes = $xpath->query('//drupal-media[@data-entity-type="media" and normalize-space(@data-entity-uuid)!=""]');
+      if ($mediaNodes !== false) {
+        foreach ($mediaNodes as $node) {
+          /** @var \DOMElement $node */
+          $uuid = $node->getAttribute('data-entity-uuid');
+          $media = $this->entityRepository->loadEntityByUuid('media', $uuid);
 
-        if ($media) {
-          $embed_entities[] = $this->exporter->doExportToArray($media);
+          if ($media instanceof MediaInterface) {
+            $embed_entities[] = $this->exporter->doExportToArray($media);
+          }
         }
       }
 
-      foreach ($xpath->query('//a[normalize-space(@href)!="" and normalize-space(@data-entity-type)!="" and normalize-space(@data-entity-uuid)!=""]') as $element) {
-        /** @var \DOMElement $element */
-        $entity_type_id = $element->getAttribute('data-entity-type');
-        $uuid = $element->getAttribute('data-entity-uuid');
-        $linked_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $uuid);
+      $linkNodes = $xpath->query('//a[normalize-space(@href)!="" and normalize-space(@data-entity-type)!="" and normalize-space(@data-entity-uuid)!=""]');
+      if ($linkNodes !== false) {
+        foreach ($linkNodes as $element) {
+          /** @var \DOMElement $element */
+          $entity_type_id = $element->getAttribute('data-entity-type');
+          $uuid = $element->getAttribute('data-entity-uuid');
+          $linked_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $uuid);
 
-        // Skip the process if the link is broken and entity could not be found.
-        if (!$linked_entity instanceof FieldableEntityInterface) {
-          continue;
-        }
+          // Skip the process if the link is broken and entity could not be found.
+          if (!($linked_entity instanceof FieldableEntityInterface)) {
+            continue;
+          }
 
-        if (!$this->exporter->isReferenceCached($linked_entity)) {
-          $embed_entities[] = $this->exporter->doExportToArray($linked_entity);
-        }
-        else {
-          $embed_entities[] = [
-            'uuid' => $linked_entity->uuid(),
-            'entity_type' => $linked_entity->getEntityTypeId(),
-            'base_fields' => $this->exporter->exportBaseValues($linked_entity),
-            'bundle' => $linked_entity->bundle(),
-          ];
+          if (!$this->exporter->isReferenceCached($linked_entity)) {
+            $embed_entities[] = $this->exporter->doExportToArray($linked_entity);
+          }
+          else {
+            $embed_entities[] = [
+              'uuid' => $linked_entity->uuid(),
+              'entity_type' => $linked_entity->getEntityTypeId(),
+              'base_fields' => $this->exporter->exportBaseValues($linked_entity),
+              'bundle' => $linked_entity->bundle(),
+            ];
+          }
         }
       }
 
-      foreach ($xpath->query('//img[@data-entity-type="file" and normalize-space(@data-entity-uuid)!=""]') as $node) {
-        /** @var \DOMElement $node */
-        $uuid = $node->getAttribute('data-entity-uuid');
-        $file = $this->entityRepository->loadEntityByUuid('file', $uuid);
-        assert($file === NULL || $file instanceof FileInterface);
+      $fileNodes = $xpath->query('//img[@data-entity-type="file" and normalize-space(@data-entity-uuid)!=""]');
+      if ($fileNodes !== false) {
+        foreach ($fileNodes as $node) {
+          /** @var \DOMElement $node */
+          $uuid = $node->getAttribute('data-entity-uuid');
+          $file = $this->entityRepository->loadEntityByUuid('file', $uuid);
 
-        // File entity does not need a stub entity, so we do a full export.
-        if ($file) {
-          $embed_entities[] = $this->exporter->doExportToArray($file);
+          // File entity does not need a stub entity, so we do a full export.
+          if ($file instanceof FileInterface) {
+            $embed_entities[] = $this->exporter->doExportToArray($file);
+          }
         }
       }
 
@@ -171,9 +192,17 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
 
   /**
    * {@inheritdoc}
+   * 
+   * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
+   *   The entity to import the field value into.
+   * @param string $fieldName
+   *   The field name.
+   * @param array<int, array<string, mixed>> $value
+   *   The field values to import.
    */
   public function importFieldValue(FieldableEntityInterface $entity, string $fieldName, array $value): void {
     foreach ($value as $delta => $item) {
+      /** @var array<int, array<string, mixed>> $embed_entities */
       $embed_entities = $item['embed_entities'] ?? [];
 
       if (array_key_exists('embed_entities', $item)) {
@@ -185,15 +214,22 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
           $this->importer->doImport($embed_entity);
         }
         else {
-          $referenced_entity = $this
-            ->entityRepository
-            ->loadEntityByUuid($embed_entity['entity_type'], $embed_entity['uuid']);
+          if (isset($embed_entity['entity_type']) && isset($embed_entity['uuid']) 
+              && is_string($embed_entity['entity_type']) && is_string($embed_entity['uuid'])) {
+            $referenced_entity = $this
+              ->entityRepository
+              ->loadEntityByUuid($embed_entity['entity_type'], $embed_entity['uuid']);
 
-          // Create a stub entity without custom field values.
-          if (!$referenced_entity) {
-            $this->importer->createStubEntity($embed_entity);
+            // Create a stub entity without custom field values.
+            if (!$referenced_entity) {
+              $this->importer->createStubEntity($embed_entity);
+            }
           }
         }
+      }
+
+      if (!isset($item['value']) || !is_string($item['value'])) {
+        continue;
       }
 
       $text = $item['value'];
@@ -201,19 +237,21 @@ class TextField extends SchwabContentSyncFieldProcessorPluginBase implements Con
       $xpath = new \DOMXPath($dom);
       $needs_update = FALSE;
 
-      foreach ($xpath->query('//a[normalize-space(@href)!="" and normalize-space(@data-entity-type)!="" and normalize-space(@data-entity-uuid)!=""]') as $element) {
-        /** @var \DOMElement $element */
-        $entity_type_id = $element->getAttribute('data-entity-type');
-        $uuid = $element->getAttribute('data-entity-uuid');
-        $linked_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $uuid);
-        assert($linked_entity === NULL || $linked_entity instanceof FieldableEntityInterface);
+      $linkNodes = $xpath->query('//a[normalize-space(@href)!="" and normalize-space(@data-entity-type)!="" and normalize-space(@data-entity-uuid)!=""]');
+      if ($linkNodes !== false) {
+        foreach ($linkNodes as $element) {
+          /** @var \DOMElement $element */
+          $entity_type_id = $element->getAttribute('data-entity-type');
+          $uuid = $element->getAttribute('data-entity-uuid');
+          $linked_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $uuid);
 
-        if ($linked_entity) {
-          $needs_update = TRUE;
-          $element->setAttribute('href', $linked_entity->toUrl('canonical', [
-            'alias' => TRUE,
-            'path_processing' => FALSE,
-          ])->toString());
+          if ($linked_entity instanceof FieldableEntityInterface) {
+            $needs_update = TRUE;
+            $element->setAttribute('href', $linked_entity->toUrl('canonical', [
+              'alias' => TRUE,
+              'path_processing' => FALSE,
+            ])->toString());
+          }
         }
       }
 
