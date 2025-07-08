@@ -18,7 +18,7 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
    * Used for performance optimization to avoid repeated calls to
    * getDefinitions().
    *
-   * @var array|null
+   * @var array<string, array<string, mixed>>|null
    */
   protected ?array $fieldTypePluginDefinitions = NULL;
 
@@ -32,7 +32,7 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
   /**
    * Constructs SchwabContentSyncFieldProcessorPluginManager object.
    *
-   * @param \Traversable $namespaces
+   * @param \Traversable<string, mixed> $namespaces
    *   An object that implements \Traversable which contains the root paths
    *   keyed by the corresponding namespace to look for plugin implementations.
    * @param \Drupal\Core\Cache\CacheBackendInterface $cacheBackend
@@ -62,6 +62,14 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
 
   /**
    * {@inheritdoc}
+   *
+   * @param string $plugin_id
+   *   The plugin ID.
+   * @param array<string, mixed> $configuration
+   *   The plugin configuration.
+   *
+   * @return \Drupal\schwab_content_sync\SchwabContentSyncFieldProcessorInterface
+   *   The plugin instance.
    */
   public function createInstance($plugin_id, array $configuration = []): SchwabContentSyncFieldProcessorInterface {
     $instance = parent::createInstance($plugin_id, $configuration);
@@ -81,6 +89,9 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
 
   /**
    * {@inheritdoc}
+   *
+   * @return array<string, mixed>|null
+   *   The plugin definition or null if not found.
    */
   public function findFieldPluginDefinition(
     string $entityType,
@@ -104,9 +115,11 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
   ): SchwabContentSyncFieldProcessorInterface {
     $pluginDefinition = $this->findFieldPluginDefinition($entityType, $bundle, $fieldName);
 
-    return $pluginDefinition
-      ? $this->createInstance($pluginDefinition['id'])
-      : $this->createInstance('generic');
+    if ($pluginDefinition && isset($pluginDefinition['id']) && is_string($pluginDefinition['id'])) {
+      return $this->createInstance($pluginDefinition['id']);
+    }
+    
+    return $this->createInstance('generic');
   }
 
   /**
@@ -140,17 +153,32 @@ class SchwabContentSyncFieldProcessorPluginManager extends DefaultPluginManager 
   /**
    * Returns a list of field type plugin definitions, keyed by field type.
    *
-   * @return array
+   * @return array<string, array<string, mixed>>
    *   The field type plugin definitions.
    */
   protected function getFieldTypesPlugins(): array {
     if (!isset($this->fieldTypePluginDefinitions)) {
       $this->fieldTypePluginDefinitions = [];
       foreach ($this->getDefinitions() as $definition) {
-        if (isset($this->fieldTypePluginDefinitions[$definition['field_type']])) {
-          throw new \LogicException(sprintf('The field type "%s" is already defined by the "%s" plugin.', $definition['field_type'], $this->fieldTypePluginDefinitions[$definition['field_type']]['id']));
+        if (!is_array($definition) || !isset($definition['field_type']) || !is_string($definition['field_type'])) {
+          continue;
         }
-        $this->fieldTypePluginDefinitions[$definition['field_type']] = $definition;
+        
+        $field_type = $definition['field_type'];
+        
+        if (isset($this->fieldTypePluginDefinitions[$field_type])) {
+          $existing_plugin_id = isset($this->fieldTypePluginDefinitions[$field_type]['id']) 
+            ? (string) $this->fieldTypePluginDefinitions[$field_type]['id'] 
+            : 'unknown';
+            
+          throw new \LogicException(sprintf(
+            'The field type "%s" is already defined by the "%s" plugin.', 
+            $field_type, 
+            $existing_plugin_id
+          ));
+        }
+        
+        $this->fieldTypePluginDefinitions[$field_type] = $definition;
       }
     }
 
