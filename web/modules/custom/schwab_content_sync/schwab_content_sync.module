@@ -1,0 +1,26 @@
+<?php
+
+/**
+ * Implements hook_form_FORM_ID_alter() for single_content_sync_admin_settings.
+ */
+function schwab_content_sync_form_single_content_sync_admin_settings_alter(&$form, &$form_state, $form_id) {
+  // Hide the allowed entity types section
+  $form['allowed_types']['#access'] = FALSE;
+  
+  // Add a message
+  $form['paragraph_library_message'] = [
+    '#type' => 'markup',
+    '#markup' => '<p>' . t('This site is configured to only sync Paragraph Library items.') . '</p>',
+    '#weight' => -10,
+  ];
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function schwab_content_sync_menu_local_tasks_alter(&$data, $route_name) {
+  // Rename the import tab on content page
+  if (isset($data['tabs'][0]['single_content_sync.import'])) {
+    $data['tabs'][0]['single_content_sync.import']['#link']['title'] = t('Import Library Items');
+  }
+}

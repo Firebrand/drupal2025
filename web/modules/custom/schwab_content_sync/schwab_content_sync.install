@@ -1,0 +1,12 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function schwab_content_sync_install() {
+  // Force update the configuration to only allow paragraph library items
+  \Drupal::configFactory()
+    ->getEditable('single_content_sync.settings')
+    ->set('allowed_entity_types', ['paragraphs_library_item' => []])
+    ->save();
+}

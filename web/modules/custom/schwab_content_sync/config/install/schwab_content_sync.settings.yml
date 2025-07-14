@@ -1,0 +1,5 @@
+allowed_entity_types:
+  paragraphs_library_item: []
+site_uuid_check: true
+import_directory_schema: 'temporary'
+export_directory_schema: 'temporary'

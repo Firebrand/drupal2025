@@ -1,8 +1,0 @@
-schwab_content_sync.export:
-  deriver: \Drupal\schwab_content_sync\Plugin\Derivative\ContentExportLocalTasks
-
-schwab_content_sync.import:
-  route_name: schwab_content_sync.import
-  base_route: system.admin_content
-  title: 'Import'
-  weight: 10

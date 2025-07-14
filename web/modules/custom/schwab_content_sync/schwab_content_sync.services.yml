@@ -1,0 +1,5 @@
+services:
+  schwab_content_sync.route_subscriber:
+    class: Drupal\schwab_content_sync\Routing\RouteSubscriber
+    tags:
+      - { name: event_subscriber }

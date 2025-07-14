@@ -1,0 +1,8 @@
+name: Schwab Content Sync
+type: module
+description: 'Customizes Single Content Sync for Paragraph Library Items only'
+core_version_requirement: ^9.3 || ^10 || ^11
+package: Content
+dependencies:
+  - single_content_sync
+  - paragraphs_library

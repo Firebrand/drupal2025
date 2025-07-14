@@ -1,0 +1,12 @@
+services:
+  single_content_sync.commands:
+    class: \Drupal\single_content_sync\Commands\ContentSyncCommands
+    arguments:
+      - '@single_content_sync.exporter'
+      - '@single_content_sync.importer'
+      - '@single_content_sync.file_generator'
+      - '@messenger'
+      - '@single_content_sync.helper'
+      - '@single_content_sync.command_helper'
+    tags:
+      - { name: drush.command }
